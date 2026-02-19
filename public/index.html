@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Garden City eSME</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111827;
+      color: #f3f4f6;
+      padding-bottom: 70px;
+    }
+    .header {
+      background: #000;
+      border-bottom: 2px solid #ca8a04;
+      padding: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-content {
+      flex: 1;
+    }
+    .header h1 {
+      color: #eab308;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .auth-btn {
+      background: #ca8a04;
+      color: #000;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .auth-btn:active {
+      background: #a16207;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 100;
+      overflow-y: auto;
+    }
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 400px;
+      margin: 20px;
+    }
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #374151;
+    }
+    .modal-title {
+      color: #eab308;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .close-btn {
+      float: right;
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 24px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .social-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .social-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .google-btn {
+      background: #fff;
+      color: #000;
+    }
+    .facebook-btn {
+      background: #1877f2;
+      color: #fff;
+    }
+    .phone-btn {
+      background: #25D366;
+      color: #fff;
+    }
+    .divider {
+      text-align: center;
+      color: #6b7280;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+    .phone-input-group {
+      margin-top: 16px;
+    }
+    .phone-input {
+      width: 100%;
+      padding: 12px;
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #f3f4f6;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .continue-btn {
+      width: 100%;
+      background: #ca8a04;
+      color: #000;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .continue-btn:active {
+      background: #a16207;
+    }
+    .toggle-text {
+      text-align: center;
+      margin-top: 16px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .toggle-link {
+      color: #eab308;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .header p {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .search {
+      padding: 16px;
+      background: #1f2937;
+    }
+    .search input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #f3f4f6;
+      font-size: 14px;
+    }
+    .categories {
+      padding: 12px 16px;
+      background: #1f2937;
+      border-bottom: 1px solid #374151;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .cat-btn {
+      display: inline-block;
+      padding: 6px 16px;
+      margin-right: 8px;
+      background: #374151;
+      color: #d1d5db;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .cat-btn.active {
+      background: #ca8a04;
+      color: #000;
+    }
+    .results {
+      padding: 8px 16px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .stalls {
+      padding: 0 16px 16px;
+    }
+    .stall-card {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .stall-name {
+      color: #eab308;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .stall-category {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .stall-location {
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .whatsapp-btn {
+      width: 100%;
+      background: #25D366;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-top: 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .whatsapp-btn:active {
+      background: #1DA851;
+    }
+    .contact-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .contact-btn {
+      padding: 10px 8px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .whatsapp-contact {
+      background: #25D366;
+      color: white;
+    }
+    .whatsapp-contact:active {
+      background: #1DA851;
+    }
+    .facebook-contact {
+      background: #1877f2;
+      color: white;
+    }
+    .facebook-contact:active {
+      background: #1465d6;
+    }
+    .phone-contact {
+      background: #eab308;
+      color: #000;
+    }
+    .phone-contact:active {
+      background: #ca8a04;
+    }
+    .nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #000;
+      border-top: 2px solid #ca8a04;
+      display: flex;
+      justify-content: space-around;
+    }
+    .nav-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: none;
+      color: #6b7280;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .nav-btn.active {
+      color: #eab308;
+    }
+    .nav-icon {
+      font-size: 24px;
+    }
+    .vendor-form {
+      padding: 24px 16px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-label {
+      display: block;
+      color: #d1d5db;
+      font-size: 14px;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #f3f4f6;
+      font-size: 14px;
+    }
+    .upload-box {
+      border: 2px dashed #374151;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      background: #1f2937;
+      cursor: pointer;
+    }
+    .upload-box input {
+      display: none;
+    }
+    .upload-text {
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .submit-btn {
+      width: 100%;
+      background: #ca8a04;
+      color: #000;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .submit-btn:active {
+      background: #a16207;
+    }
+    .success-msg {
+      background: #065f46;
+      border: 1px solid #047857;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+    }
+    .success-icon {
+      font-size: 48px;
+      color: #10b981;
+    }
+    .success-title {
+      color: #34d399;
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+    .vouchers {
+      padding: 16px;
+    }
+    .info-banner {
+      background: rgba(127, 29, 29, 0.3);
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .info-title {
+      color: #f87171;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .info-list {
+      color: #d1d5db;
+      font-size: 14px;
+      padding-left: 20px;
+    }
+    .info-list li {
+      margin: 4px 0;
+    }
+    .voucher-card {
+      background: #1f2937;
+      border: 2px solid #ca8a04;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .voucher-price {
+      font-size: 32px;
+      font-weight: bold;
+      color: #eab308;
+    }
+    .voucher-data {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .voucher-badge {
+      background: #ca8a04;
+      color: #000;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      float: right;
+    }
+    .voucher-desc {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #374151;
+    }
+    .location-box {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 24px;
+    }
+    .location-title {
+      color: #eab308;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .location-text {
+      color: #d1d5db;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .hidden { display: none; }
+    .preview-img {
+      max-height: 200px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .remove-btn {
+      color: #ef4444;
+      background: none;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Directory Screen -->
+  <div id="directory" class="screen">
+    <div class="header">
+      <div class="header-content">
+        <h1>Garden City eSME</h1>
+      </div>
+      <button class="auth-btn" onclick="openAuthModal()">Sign In</button>
+    </div>
+    
+    <div style="background: #1f2937; border-bottom: 1px solid #374151; padding: 8px 16px; text-align: center;">
+      <p style="color: #9ca3af; font-size: 12px;">A product of <a href="https://www.dspng.tech" target="_blank" style="color: #eab308; text-decoration: none; font-weight: 600;">Deeps Systems</a>. Local Tech SME helping other SME's.</p>
+    </div>
+    
+    <div class="search">
+      <input type="text" id="searchInput" placeholder="Search stalls..." onkeyup="filterStalls()">
+    </div>
+    
+    <div class="categories" id="categories"></div>
+    
+    <div class="results" id="results"></div>
+    
+    <div class="stalls" id="stalls"></div>
+  </div>
+
+  <!-- Vendor Screen -->
+  <div id="vendor" class="screen hidden">
+    <div class="header">
+      <h1>Vendor Portal</h1>
+      <p>Upload your products</p>
+    </div>
+    
+    <div class="vendor-form">
+      <div id="vendorContent">
+        <form onsubmit="submitProduct(event)">
+          <div class="form-group">
+            <label class="form-label">Product Photo</label>
+            <label class="upload-box" id="uploadBox">
+              <div id="uploadContent">
+                <div style="color: #eab308; font-size: 24px; margin-bottom: 8px;">📷</div>
+                <div class="upload-text">Tap to upload photo</div>
+                <div style="color: #6b7280; font-size: 12px; margin-top: 4px;">JPG, PNG (max 5MB)</div>
+              </div>
+              <input type="file" id="photoInput" accept="image/*" onchange="previewImage(event)" required>
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Product Name</label>
+            <input type="text" class="form-input" placeholder="e.g., Leather Handbag" required>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Price (PGK)</label>
+            <input type="number" class="form-input" placeholder="0.00" step="0.01" min="0" required style="padding-left: 32px;">
+            <div style="position: relative; margin-top: -38px; margin-left: 12px; color: #9ca3af; pointer-events: none;">K</div>
+          </div>
+          
+          <button type="submit" class="submit-btn">Upload Product</button>
+        </form>
+        
+        <div class="location-box" style="margin-top: 32px;">
+          <div class="location-title">Your Products</div>
+          <div class="location-text">Products you upload will appear here and in the mall directory.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WiFi Screen -->
+  <div id="wifi" class="screen hidden">
+    <div class="header">
+      <h1>Wi-Fi Vouchers</h1>
+      <p>Stay connected at Garden City eSME</p>
+    </div>
+    
+    <div class="vouchers">
+      <div class="info-banner">
+        <div class="info-title">How to Purchase</div>
+        <ol class="info-list">
+          <li>Visit the Deeps Systems stall</li>
+          <li>Choose your voucher amount</li>
+          <li>Make payment at the counter</li>
+          <li>Receive your voucher code instantly</li>
+        </ol>
+      </div>
+      
+      <div class="voucher-card">
+        <span class="voucher-badge">24 hours</span>
+        <div class="voucher-price">K2</div>
+        <div class="voucher-data">500MB Data</div>
+        <div class="voucher-desc">Perfect for quick browsing</div>
+      </div>
+      
+      <div class="voucher-card">
+        <span class="voucher-badge">3 days</span>
+        <div class="voucher-price">K5</div>
+        <div class="voucher-data">1.5GB Data</div>
+        <div class="voucher-desc">Perfect for social media & messaging</div>
+      </div>
+      
+      <div class="voucher-card">
+        <span class="voucher-badge">7 days</span>
+        <div class="voucher-price">K10</div>
+        <div class="voucher-data">4GB Data</div>
+        <div class="voucher-desc">Perfect for streaming & downloads</div>
+      </div>
+      
+      <div class="location-box">
+        <div class="location-title">Find Us</div>
+        <div class="location-text">
+          <strong>Deeps Systems Stall</strong><br>
+          Ground Floor, Near Main Entrance<br>
+          Garden City eSME<br>
+          <div style="color: #6b7280; margin-top: 8px; font-size: 12px;">Open: Mon-Sat, 9AM - 6PM</div>
+        </div>
+      </div>
+      
+      <div class="location-box">
+        <div class="location-title">Payment Methods</div>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <span style="background: #374151; padding: 4px 12px; border-radius: 4px; font-size: 12px;">Cash</span>
+          <span style="background: #374151; padding: 4px 12px; border-radius: 4px; font-size: 12px;">Mobile Money</span>
+          <span style="background: #374151; padding: 4px 12px; border-radius: 4px; font-size: 12px;">EFTPOS</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accounts Suite Screen -->
+  <div id="accounts" class="screen hidden">
+    <div class="header">
+      <h1>Accounts Suite</h1>
+      <p>Business Management Systems</p>
+    </div>
+    
+    <div class="vouchers">
+      <div class="info-banner">
+        <div class="info-title">Business Accounting Tools</div>
+        <p style="color: #d1d5db; font-size: 14px; margin-top: 8px;">Manage your business with professional accounting and POS systems. Talk to Deeps Systems for setup and support.</p>
+      </div>
+      
+      <div class="stall-card" style="margin-bottom: 16px;">
+        <div class="stall-name" style="display: flex; align-items: center; gap: 8px;">
+          💼 Loyverse POS
+        </div>
+        <div class="stall-category" style="margin-top: 8px;">Point of Sale & Inventory Management</div>
+        <p style="color: #d1d5db; font-size: 14px; margin-top: 8px; line-height: 1.5;">
+          Complete POS solution for retail and hospitality. Track sales, manage inventory, accept payments, and generate reports.
+        </p>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #374151;">
+          <div style="color: #9ca3af; font-size: 13px;">✓ Free plan available</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Inventory tracking</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Sales analytics</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Multi-device support</div>
+        </div>
+        <a href="https://loyverse.com" target="_blank" style="display: block; width: 100%; background: #ca8a04; color: #000; text-align: center; padding: 10px; border-radius: 8px; font-weight: 600; margin-top: 12px; text-decoration: none;">Visit Loyverse</a>
+      </div>
+      
+      <div class="stall-card" style="margin-bottom: 16px;">
+        <div class="stall-name" style="display: flex; align-items: center; gap: 8px;">
+          📊 Wave Accounting
+        </div>
+        <div class="stall-category" style="margin-top: 8px;">Free Accounting Software</div>
+        <p style="color: #d1d5db; font-size: 14px; margin-top: 8px; line-height: 1.5;">
+          Professional accounting tools for small businesses. Invoicing, expense tracking, and financial reporting.
+        </p>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #374151;">
+          <div style="color: #9ca3af; font-size: 13px;">✓ Completely free</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Invoicing & payments</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Expense tracking</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Financial reports</div>
+        </div>
+        <a href="https://www.waveapps.com" target="_blank" style="display: block; width: 100%; background: #ca8a04; color: #000; text-align: center; padding: 10px; border-radius: 8px; font-weight: 600; margin-top: 12px; text-decoration: none;">Visit Wave</a>
+      </div>
+      
+      <div class="stall-card" style="margin-bottom: 16px;">
+        <div class="stall-name" style="display: flex; align-items: center; gap: 8px;">
+          🧾 QuickBooks
+        </div>
+        <div class="stall-category" style="margin-top: 8px;">Professional Accounting Platform</div>
+        <p style="color: #d1d5db; font-size: 14px; margin-top: 8px; line-height: 1.5;">
+          Industry-leading accounting software for growing businesses. Advanced features for accounting and bookkeeping.
+        </p>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #374151;">
+          <div style="color: #9ca3af; font-size: 13px;">✓ Bank reconciliation</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Payroll management</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Tax preparation</div>
+          <div style="color: #9ca3af; font-size: 13px;">✓ Advanced reporting</div>
+        </div>
+        <a href="https://quickbooks.intuit.com" target="_blank" style="display: block; width: 100%; background: #ca8a04; color: #000; text-align: center; padding: 10px; border-radius: 8px; font-weight: 600; margin-top: 12px; text-decoration: none;">Visit QuickBooks</a>
+      </div>
+      
+      <div class="location-box">
+        <div class="location-title">Need Help?</div>
+        <div class="location-text">
+          Contact <strong>Deeps Systems</strong> for assistance with setup, training, and integration of these accounting tools into your business.
+          <div style="margin-top: 12px;">
+            <a href="https://www.dspng.tech" target="_blank" style="color: #eab308; text-decoration: none; font-weight: 600;">Visit www.dspng.tech</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button class="close-btn" onclick="closeAuthModal()">×</button>
+        <div class="modal-title" id="modalTitle">Sign In</div>
+      </div>
+      <div class="modal-body">
+        <!-- Social Login Buttons -->
+        <div class="social-btns">
+          <button class="social-btn google-btn" onclick="socialLogin('google')">
+            <span>🔍</span> Continue with Google
+          </button>
+          <button class="social-btn facebook-btn" onclick="socialLogin('facebook')">
+            <span>📘</span> Continue with Facebook
+          </button>
+          <button class="social-btn phone-btn" onclick="togglePhoneInput()">
+            <span>📱</span> Continue with Phone
+          </button>
+        </div>
+        
+        <!-- Phone Number Input (Hidden by default) -->
+        <div id="phoneInputSection" style="display: none;">
+          <div class="divider">Enter your phone number</div>
+          <div class="phone-input-group">
+            <input 
+              type="tel" 
+              class="phone-input" 
+              placeholder="+675 7XXX XXXX"
+              id="phoneNumber"
+            >
+            <button class="continue-btn" onclick="phoneLogin()">Continue</button>
+          </div>
+        </div>
+        
+        <div class="toggle-text">
+          <span id="toggleText">Don't have an account? <span class="toggle-link" onclick="toggleAuthMode()">Sign Up</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="nav">
+    <button class="nav-btn active" onclick="switchScreen('directory')">
+      <div class="nav-icon">🏪</div>
+      <div>Directory</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('vendor')">
+      <div class="nav-icon">📤</div>
+      <div>Vendor</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('wifi')">
+      <div class="nav-icon">📶</div>
+      <div>Wi-Fi</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('accounts')">
+      <div class="nav-icon">💰</div>
+      <div>Accounts</div>
+    </button>
+  </nav>
+
+  <script>
+    // Sample stall data
+    const categories = ['Fashion', 'Catering', 'Tech', 'Beauty', 'Home & Living', 'Sports', 'Accessories'];
+    const sampleNames = {
+      Fashion: ['Style Hub', 'Trendy Threads', 'Urban Wear', 'Fashion First', 'Chic Boutique'],
+      Catering: ['Tasty Bites', 'Food Paradise', 'Quick Eats', 'Coffee Corner', 'Grill Master'],
+      Tech: ['Phone Fix', 'Gadget Zone', 'Tech Solutions', 'Mobile World', 'Computer Care'],
+      Beauty: ['Glam Studio', 'Beauty Bar', 'Hair & Nails', 'Spa Corner', 'Makeup Magic'],
+      'Home & Living': ['Home Decor', 'Kitchen Essentials', 'Furniture Plus', 'Interior Style'],
+      Sports: ['Fitness Gear', 'Sports World', 'Athletic Wear', 'Game Zone'],
+      Accessories: ['Bag Shop', 'Watch Gallery', 'Jewelry Box', 'Sunglasses Store']
+    };
+    
+    const stalls = [];
+    for (let i = 0; i < 120; i++) {
+      const category = categories[i % categories.length];
+      const names = sampleNames[category] || ['General Store'];
+      const name = names[i % names.length] + (Math.floor(i / names.length) > 0 ? ' ' + Math.floor(i / names.length) : '');
+      
+      stalls.push({
+        id: i + 1,
+        name: name.trim(),
+        category: category,
+        location: 'Level ' + (Math.floor(i / 40) + 1) + ', Stall ' + ((i % 40) + 1),
+        phone: '+675 7' + String(1000000 + i).slice(1)
+      });
+    }
+    
+    let selectedCategory = 'All';
+    
+    // Initialize categories
+    function initCategories() {
+      const catDiv = document.getElementById('categories');
+      catDiv.innerHTML = '<button class="cat-btn active" onclick="selectCategory(\'All\')">All</button>';
+      categories.forEach(cat => {
+        catDiv.innerHTML += '<button class="cat-btn" onclick="selectCategory(\'' + cat + '\')">' + cat + '</button>';
+      });
+    }
+    
+    // Select category
+    function selectCategory(cat) {
+      selectedCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      filterStalls();
+    }
+    
+    // Filter stalls
+    function filterStalls() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = stalls.filter(s => {
+        const matchSearch = s.name.toLowerCase().includes(search) || s.location.toLowerCase().includes(search);
+        const matchCat = selectedCategory === 'All' || s.category === selectedCategory;
+        return matchSearch && matchCat;
+      });
+      
+      document.getElementById('results').textContent = filtered.length + ' stall' + (filtered.length !== 1 ? 's' : '') + ' found';
+      
+      const stallsDiv = document.getElementById('stalls');
+      stallsDiv.innerHTML = '';
+      
+      filtered.forEach(stall => {
+        stallsDiv.innerHTML += `
+          <div class="stall-card">
+            <div class="stall-name">${stall.name}</div>
+            <div class="stall-category">${stall.category}</div>
+            <div class="stall-location">${stall.location}</div>
+            <div class="contact-buttons">
+              <button class="contact-btn whatsapp-contact" onclick="openWhatsApp('${stall.phone}', '${stall.name}')">
+                <span>💬</span>
+                <span>WhatsApp</span>
+              </button>
+              <button class="contact-btn facebook-contact" onclick="openFacebook('${stall.name}')">
+                <span>📘</span>
+                <span>Message</span>
+              </button>
+              <button class="contact-btn phone-contact" onclick="makeCall('${stall.phone}')">
+                <span>📞</span>
+                <span>Call</span>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    }
+    
+    // Open WhatsApp
+    function openWhatsApp(phone, name) {
+      const msg = encodeURIComponent('Hi ' + name + ', I found you on the Garden City eSME Directory!');
+      window.open('https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + msg, '_blank');
+    }
+    
+    // Open Facebook Messenger
+    function openFacebook(name) {
+      // In production, this would link to the vendor's actual Facebook page
+      alert('Opening Facebook Messenger for ' + name + '\n\nIn production, this will link to the vendor\'s Facebook page or Messenger.');
+      // Example: window.open('https://m.me/vendorpageid', '_blank');
+    }
+    
+    // Make Phone Call
+    function makeCall(phone) {
+      window.location.href = 'tel:' + phone;
+    }
+    
+    // Switch screen
+    function switchScreen(screen) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+      document.getElementById(screen).classList.remove('hidden');
+      
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.closest('.nav-btn').classList.add('active');
+    }
+    
+    // Preview image
+    function previewImage(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('uploadContent').innerHTML = `
+            <img src="${e.target.result}" class="preview-img">
+            <button type="button" class="remove-btn" onclick="removeImage()">Remove</button>
+          `;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+    
+    // Remove image
+    function removeImage() {
+      document.getElementById('photoInput').value = '';
+      document.getElementById('uploadContent').innerHTML = `
+        <div style="color: #eab308; font-size: 24px; margin-bottom: 8px;">📷</div>
+        <div class="upload-text">Tap to upload photo</div>
+        <div style="color: #6b7280; font-size: 12px; margin-top: 4px;">JPG, PNG (max 5MB)</div>
+      `;
+    }
+    
+    // Submit product
+    function submitProduct(event) {
+      event.preventDefault();
+      document.getElementById('vendorContent').innerHTML = `
+        <div class="success-msg">
+          <div class="success-icon">✓</div>
+          <div class="success-title">Product Uploaded!</div>
+          <div style="color: #6ee7b7; font-size: 14px; margin-top: 4px;">Your product has been added successfully.</div>
+        </div>
+      `;
+      
+      setTimeout(() => {
+        location.reload();
+      }, 2000);
+    }
+    
+    // Auth Modal Functions
+    let isSignUp = false;
+    
+    function openAuthModal() {
+      document.getElementById('authModal').classList.add('show');
+    }
+    
+    function closeAuthModal() {
+      document.getElementById('authModal').classList.remove('show');
+      document.getElementById('phoneInputSection').style.display = 'none';
+    }
+    
+    function toggleAuthMode() {
+      isSignUp = !isSignUp;
+      document.getElementById('modalTitle').textContent = isSignUp ? 'Sign Up' : 'Sign In';
+      document.getElementById('toggleText').innerHTML = isSignUp 
+        ? 'Already have an account? <span class="toggle-link" onclick="toggleAuthMode()">Sign In</span>'
+        : 'Don\'t have an account? <span class="toggle-link" onclick="toggleAuthMode()">Sign Up</span>';
+    }
+    
+    function togglePhoneInput() {
+      const phoneSection = document.getElementById('phoneInputSection');
+      phoneSection.style.display = phoneSection.style.display === 'none' ? 'block' : 'none';
+    }
+    
+    function socialLogin(provider) {
+      // In production, this would integrate with OAuth providers
+      alert('Logging in with ' + provider + '...\n\nThis feature will be connected to ' + provider + ' authentication in production.');
+      closeAuthModal();
+    }
+    
+    function phoneLogin() {
+      const phone = document.getElementById('phoneNumber').value;
+      if (!phone || phone.length < 10) {
+        alert('Please enter a valid phone number');
+        return;
+      }
+      
+      // In production, this would send an SMS verification code
+      alert('Verification code sent to ' + phone + '\n\nIn production, you will receive an SMS with a verification code.');
+      closeAuthModal();
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('authModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeAuthModal();
+      }
+    });
+    
+    // Initialize on load
+    initCategories();
+    filterStalls();
+  </script>
+</body>
+</html>
