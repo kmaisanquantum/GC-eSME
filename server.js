@@ -9,24 +9,33 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Vercel compatibility: use /tmp for writable directories and database
+const IS_VERCEL = process.env.VERCEL === '1';
+const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(__dirname, 'uploads');
+const DATABASE_PATH = IS_VERCEL ? path.join('/tmp', 'garden_city.db') : path.join(__dirname, 'garden_city.db');
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static('public'));
 
 // Create uploads directory
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.error('Error creating uploads directory:', err);
 }
 
 // Database setup
-const db = new sqlite3.Database('./garden_city.db', (err) => {
+const db = new sqlite3.Database(DATABASE_PATH, (err) => {
   if (err) {
     console.error('Error opening database:', err);
   } else {
-    console.log('Connected to Garden City SQLite database');
+    console.log('Connected to Garden City SQLite database at', DATABASE_PATH);
     initDatabase();
   }
 });
@@ -101,7 +110,7 @@ function initDatabase() {
 // File upload configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -417,10 +426,14 @@ app.get('/api/stats', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Garden City eSME API running on http://localhost:${PORT}`);
-  console.log(`API Documentation: http://localhost:${PORT}/api`);
-});
+if (!IS_VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Garden City eSME API running on http://localhost:${PORT}`);
+    console.log(`API Documentation: http://localhost:${PORT}/api`);
+  });
+}
+
+module.exports = app;
 
 // Graceful shutdown
 process.on('SIGINT', () => {
