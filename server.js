@@ -19,7 +19,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Create uploads directory
 try {
