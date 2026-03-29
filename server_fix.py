@@ -38,7 +38,7 @@ app.post("/api/auth/social", (req, res) => {
           // Create new record
           if (role === 'vendor') {
              const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone) VALUES (?, ?, ?, ?, ?, ?, ?)";
-             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME Market', ''], function(err) {
+             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', ''], function(err) {
                if (err) return res.status(500).json({ error: err.message });
                res.json({ message: "Social vendor account created", vendor: { id: this.lastID, name, email, social_provider: provider, social_id: id } });
              });

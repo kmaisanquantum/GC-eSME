@@ -1,6 +1,6 @@
-# Garden City SME Market SME centre - Fullstack Application
+# Garden City SME - Fullstack Application
 
-A complete e-commerce platform for Garden City SME Market Mall vendors to manage products, services, and customer engagement.
+A complete e-commerce platform for Garden City SME Mall vendors to manage products, services, and customer engagement.
 
 ## 🚀 Features
 

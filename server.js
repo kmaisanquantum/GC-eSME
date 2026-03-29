@@ -26,7 +26,7 @@ const db = new sqlite3.Database('./garden_city_sme.db', (err) => {
   if (err) {
     console.error('Error opening database:', err);
   } else {
-    console.log('Connected to Garden City SME Market SQLite database');
+    console.log('Connected to Garden City SME SQLite database');
     initDatabase();
   }
 });
@@ -220,7 +220,7 @@ app.post("/api/auth/social", (req, res) => {
           // Create new record
           if (role === 'vendor') {
              const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone) VALUES (?, ?, ?, ?, ?, ?, ?)";
-             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME Market', ''], function(err) {
+             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', ''], function(err) {
                if (err) return res.status(500).json({ error: err.message });
                res.json({ message: "Social vendor account created", vendor: { id: this.lastID, name, email, social_provider: provider, social_id: id } });
              });
@@ -511,7 +511,7 @@ app.get('/api/stats', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Garden City SME Market SME centre API running on http://localhost:${PORT}`);
+  console.log(`Garden City SME API running on http://localhost:${PORT}`);
 });
 
 // Graceful shutdown

@@ -1,10 +1,10 @@
-# 🏪 Garden City & Garden City SME Market SME centre - Complete Setup Guide
+# 🏪 Garden City & Garden City SME - Complete Setup Guide
 
 ## 📦 What You Have
 
 Two complete fullstack e-commerce platforms ready to deploy:
 1. **garden-city-fullstack.zip** - Garden City eSME
-2. **garden-city-fullstack.zip** - Garden City SME Market SME centre
+2. **garden-city-fullstack.zip** - Garden City SME
 
 Each package includes:
 - ✅ Node.js/Express backend server
@@ -25,7 +25,7 @@ Each package includes:
 unzip garden-city-fullstack.zip
 cd garden-city-fullstack
 
-# OR extract Garden City SME Market
+# OR extract Garden City SME
 unzip garden-city-fullstack.zip
 cd garden-city-fullstack
 ```
@@ -41,7 +41,7 @@ npm start
 ```
 
 ### Step 4: Open in browser
-- **Customer App**: http://localhost:3000 (Garden City) or http://localhost:3001 (Garden City SME Market)
+- **Customer App**: http://localhost:3000 (Garden City) or http://localhost:3001 (Garden City SME)
 - **Vendor Dashboard**: http://localhost:3000/backend.html or http://localhost:3001/backend.html
 
 That's it! 🎉
@@ -69,7 +69,7 @@ garden-city-fullstack/
 ## 🔧 Configuration
 
 ### Garden City runs on PORT 3000
-### Garden City SME Market runs on PORT 3001
+### Garden City SME runs on PORT 3001
 
 **To change the port**, edit `.env` file:
 ```
