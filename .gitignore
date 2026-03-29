@@ -1,1 +1,6 @@
-<content of .gitignore>
+node_modules/
+*.db
+uploads/
+.env
+*.log
+.DS_Store

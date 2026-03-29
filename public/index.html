@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Garden City SME Market SME centre | Local Shopping Reimagined</title>
+  <style>
+    :root {
+      --primary: #ca8a04;
+      --primary-hover: #a16207;
+      --bg-dark: #111827;
+      --bg-card: #1f2937;
+      --bg-header: #000000;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-accent: #eab308;
+      --border: #374151;
+      --whatsapp: #25D366;
+      --whatsapp-hover: #1DA851;
+      --facebook: #1877f2;
+      --google: #ffffff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      padding-bottom: 70px;
+      line-height: 1.5;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    .header {
+      background: var(--bg-header);
+      border-bottom: 2px solid var(--primary);
+      padding: 0.75rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 64px;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .header h1 {
+      color: var(--text-accent);
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .cart-trigger {
+      position: relative;
+      background: none;
+      border: none;
+      color: var(--text-main);
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+
+    .cart-count {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: var(--primary);
+      color: #000;
+      font-size: 10px;
+      font-weight: bold;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-btn {
+      background: var(--primary);
+      color: #000;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .auth-btn:hover { background: var(--primary-hover); }
+
+    .info-bar {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 16px;
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .info-bar a {
+      color: var(--text-accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .hero-slider {
+      position: relative;
+      height: 200px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .slider-container {
+      display: flex;
+      height: 100%;
+      transition: transform 0.5s ease-in-out;
+    }
+
+    .slide {
+      min-width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .slide h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      color: var(--text-accent);
+    }
+
+    .slide p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      max-width: 300px;
+      margin-bottom: 1rem;
+    }
+
+    .slider-dots {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .dot.active {
+      background: var(--primary);
+      width: 24px;
+      border-radius: 4px;
+    }
+
+    .search-container {
+      padding: 1rem;
+      position: sticky;
+      top: 64px;
+      background: var(--bg-dark);
+      z-index: 90;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-wrapper {
+      position: relative;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .search-wrapper input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-wrapper input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+    }
+
+    .categories {
+      padding: 1rem;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .categories::-webkit-scrollbar { display: none; }
+
+    .cat-btn {
+      white-space: nowrap;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .cat-btn.active {
+      background: var(--primary);
+      color: #000;
+      border-color: var(--primary);
+    }
+
+    .section-title {
+      padding: 1rem 1rem 0.5rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .results-count {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+      gap: 12px;
+      padding: 1rem;
+    }
+
+    @media (min-width: 768px) {
+      .grid-container {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 20px;
+        padding: 1.5rem;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+    }
+
+    .card-img-container {
+      position: relative;
+      aspect-ratio: 1;
+      background: #2d3748;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: var(--primary);
+      color: #000;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .card-content {
+      padding: 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-category {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .card-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-main);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.3;
+    }
+
+    .card-price {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-accent);
+      margin-top: auto;
+    }
+
+    .card-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .btn-cart {
+      background: var(--primary);
+      color: #000;
+      border: none;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-whatsapp {
+      background: var(--whatsapp);
+      color: #fff;
+      border: none;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      padding: 1rem;
+    }
+
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 450px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .modal-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body { padding: 1.25rem; }
+
+    .cart-item {
+      display: grid;
+      grid-template-columns: 60px 1fr auto;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cart-item-img {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    .cart-item-info h4 { font-size: 0.9rem; margin-bottom: 2px; }
+    .cart-item-info p { font-size: 0.8rem; color: var(--text-muted); }
+
+    .cart-total {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 2px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      font-size: 1.2rem;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+    .form-label { display: block; color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-main);
+    }
+
+    .nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--bg-header);
+      border-top: 2px solid var(--primary);
+      display: flex;
+      justify-content: space-around;
+      padding: 8px 0;
+      z-index: 100;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .nav-btn.active { color: var(--text-accent); }
+    .nav-icon { font-size: 20px; }
+
+    .hidden { display: none; }
+
+    .social-btns { display: flex; flex-direction: column; gap: 0.75rem; }
+    .social-btn {
+      width: 100%; padding: 12px; border: none; border-radius: 8px;
+      font-weight: 700; font-size: 0.875rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    .google-btn { background: var(--google); color: #000; }
+    .facebook-btn { background: var(--facebook); color: #fff; }
+    .phone-btn { background: var(--whatsapp); color: #fff; }
+
+    .acc-card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+      border: 1px solid var(--border);
+    }
+    .acc-stat { text-align: center; padding: 1rem; }
+    .acc-val { font-size: 1.5rem; font-weight: 800; color: var(--text-accent); }
+    .acc-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+  <div class="info-bar">
+    A product of <a href="https://www.dspng.tech" target="_blank">Deeps Systems</a>. Supporting Local SMEs in PNG.
+  </div>
+
+  <header class="header">
+    <a href="#" class="logo-container" onclick="switchScreen('directory')">
+      <h1>Garden City SME Market <span style="font-weight: 300;">SME centre</span></h1>
+    </a>
+    <div class="header-actions">
+      <button class="cart-trigger" onclick="toggleCart()">
+        🛒 <span class="cart-count" id="cartCount">0</span>
+      </button>
+      <button class="auth-btn" onclick="openAuthModal('login')">Sign In</button>
+      <button class="auth-btn" onclick="openAuthModal('register')" style="background:transparent; border:1px solid var(--primary); color:var(--primary);">Sign Up</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="directory" class="screen">
+      <section class="hero-slider">
+        <div class="slider-container" id="sliderContainer">
+          <div class="slide" style="background: linear-gradient(135deg, #000, var(--bg-card));">
+            <h2>Garden City SME Market SME centre</h2>
+            <p>The digital marketplace for PNG's finest local vendors and artisans.</p>
+            <button class="auth-btn" onclick="document.getElementById('searchInput').focus()">Shop Now</button>
+          </div>
+          <div class="slide" style="background: linear-gradient(135deg, var(--bg-card), #000);">
+            <h2>Grow Your Business</h2>
+            <p>Join our network of successful SMEs. Get your own digital storefront and dashboard.</p>
+            <button class="auth-btn" onclick="openAuthModal('register')" style="background: var(--text-accent); color: #000; border-color: var(--text-accent);">Join as Vendor</button>
+          </div>
+        </div>
+        <div class="slider-dots" id="sliderDots">
+          <span class="dot active" onclick="goToSlide(0)"></span>
+          <span class="dot" onclick="goToSlide(1)"></span>
+        </div>
+      </section>
+
+      <div class="search-container">
+        <div class="search-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="Search products, vendors, categories..." oninput="filterStalls()">
+        </div>
+      </div>
+
+      <div class="categories" id="categories"></div>
+
+      <div class="section-title">
+        <span>Product Directory</span>
+        <span class="results-count" id="results">Loading items...</span>
+      </div>
+
+      <div class="grid-container" id="stalls"></div>
+    </div>
+
+    <div id="vendor" class="screen hidden" style="padding: 2rem 1rem;">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.75rem; margin-bottom: 0.5rem; color: var(--text-accent);">Vendor Back Office</h2>
+        <p style="color: var(--text-muted);">Manage your products, orders, and business profiles.</p>
+      </div>
+
+      <div class="acc-card" style="text-align: center; border-color: var(--primary);">
+         <h3>Ready to sell?</h3>
+         <p style="margin: 1rem 0; color: var(--text-muted);">Access your dedicated vendor dashboard to start listing products.</p>
+         <a href="backend.html" class="auth-btn" style="display: inline-block; text-decoration: none; padding: 12px 24px;">Go to Dashboard</a>
+      </div>
+
+      <div class="acc-card">
+         <h4 style="margin-bottom: 1rem;">Platform Benefits</h4>
+         <ul style="text-align: left; color: var(--text-muted); font-size: 0.9rem; list-style: none;">
+           <li style="margin-bottom: 8px;">✅ Direct customer orders via WhatsApp</li>
+           <li style="margin-bottom: 8px;">✅ Built-in SME Accounting Suite</li>
+           <li style="margin-bottom: 8px;">✅ Professional digital storefront</li>
+           <li style="margin-bottom: 8px;">✅ Exposure to thousands of shoppers</li>
+         </ul>
+      </div>
+    </div>
+
+    <div id="wifi" class="screen hidden" style="padding: 2rem 1rem; text-align: center;">
+      <div style="font-size: 4rem; margin-bottom: 1rem;">📶</div>
+      <h2 style="color: var(--text-accent);">Garden City SME Market Wi-Fi</h2>
+      <p style="color: var(--text-muted); margin: 1rem auto; max-width: 300px;">Garden City SME Market high-speed public Wi-Fi access point coming soon.</p>
+      <div class="acc-card" style="margin-top: 2rem;">
+        <p>Stay tuned for voucher-based internet access at the Garden City SME Market SME centre.</p>
+      </div>
+    </div>
+
+    <div id="accounts" class="screen hidden" style="padding: 2rem 1rem;">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.75rem; margin-bottom: 0.5rem; color: var(--text-accent);">Accounts Suite</h2>
+        <p style="color: var(--text-muted);">Integrated bookkeeping for small businesses.</p>
+      </div>
+
+      <div id="accAuthMsg" class="acc-card" style="text-align: center;">
+         <p style="margin-bottom: 1rem;">Please sign in to your vendor account to access your business financials.</p>
+         <button class="auth-btn" onclick="openAuthModal('login')">Sign In</button>
+      </div>
+
+      <div id="accDashboard" class="hidden">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1rem;">
+          <div class="acc-card acc-stat">
+            <div class="acc-label">Revenue</div>
+            <div class="acc-val" id="accSales">K0.00</div>
+          </div>
+          <div class="acc-card acc-stat">
+            <div class="acc-label">Expenses</div>
+            <div class="acc-val" id="accExp">K0.00</div>
+          </div>
+        </div>
+        <div class="acc-card" style="text-align: center;">
+           <div class="acc-label">Estimated Profit</div>
+           <div class="acc-val" id="accProfit" style="font-size: 2rem;">K0.00</div>
+        </div>
+        <div style="text-align: center; margin-top: 1rem;">
+           <a href="backend.html" class="auth-btn" style="display: block; text-decoration: none; padding: 12px;">Manage Transactions</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="cartModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="color: var(--text-accent);">Your Shopping Cart</h3>
+        <button onclick="toggleCart()" style="background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="cartItems">
+          <p style="text-align:center; color:var(--text-muted); padding: 2rem;">Your cart is empty.</p>
+        </div>
+        <div class="cart-total">
+          <span>Total:</span>
+          <span id="cartTotal">K0.00</span>
+        </div>
+        <button class="auth-btn" style="width:100%; margin-top:1.5rem; padding: 12px;" onclick="openCheckoutModal()">
+          Proceed to Checkout
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="checkoutModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="color: var(--text-accent);">Complete Your Order</h3>
+        <button onclick="closeCheckoutModal()" style="background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="checkoutForm">
+          <div class="form-group">
+            <label class="form-label">Your Name</label>
+            <input type="text" id="custName" class="form-input" placeholder="Enter your full name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input type="tel" id="custPhone" class="form-input" placeholder="e.g. 70000000" required>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            Your order will be sent to the vendors. They will contact you via WhatsApp or Phone to arrange payment and delivery.
+          </p>
+          <button type="submit" class="auth-btn" style="width:100%; padding: 12px;">
+            Place Order
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="authModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle" style="color: var(--text-accent);">Sign In</h3>
+        <button onclick="closeAuthModal()" style="background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="authContent">
+          <!-- Login Form -->
+          <form id="loginForm">
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="loginEmail" class="form-input" placeholder="vendor@example.com" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="auth-btn" style="width:100%; padding: 12px;">Sign In</button>
+          </form>
+
+          <!-- Register Form -->
+          <form id="registerForm" class="hidden">
+            <div class="form-group">
+              <label class="form-label">Your Name</label>
+              <input type="text" id="regName" class="form-input" placeholder="John Doe" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="regEmail" class="form-input" placeholder="vendor@example.com" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone Number</label>
+              <input type="tel" id="regPhone" class="form-input" placeholder="70000000" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" id="regPassword" class="form-input" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="auth-btn" style="width:100%; padding: 12px;">Create Account</button>
+          </form>
+
+          <div style="margin: 1.5rem 0; display: flex; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 0.8rem;">
+            <div style="flex: 1; height: 1px; background: var(--border);"></div>
+            <span>OR</span>
+            <div style="flex: 1; height: 1px; background: var(--border);"></div>
+          </div>
+
+          <div class="social-btns">
+            <div id="g_id_signin"></div>
+            <button class="social-btn facebook-btn" onclick="socialLogin('facebook')">
+              <svg style="width:18px;height:18px" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96A10 10 0 0 0 22 12.06C22 6.53 17.5 2.04 12 2.04Z" /></svg>
+              Continue with Facebook
+            </button>
+          </div>
+
+          <p id="authToggleMsg" style="text-align: center; margin-top: 1.5rem; font-size: 0.875rem; color: var(--text-muted);">
+            Don't have an account? <a href="#" onclick="setAuthMode('register')" style="color: var(--text-accent);">Sign up here</a>
+          </p>
+          <p style="text-align: center; margin-top: 1rem; font-size: 0.8rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+            Are you a Vendor? <a href="backend.html" style="color: var(--text-accent); font-weight: 600;">Go to Dashboard</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-btn active" onclick="switchScreen('directory')">
+      <div class="nav-icon">🏪</div>
+      <div>Shop</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('vendor')">
+      <div class="nav-icon">📤</div>
+      <div>Sell</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('wifi')">
+      <div class="nav-icon">📶</div>
+      <div>Wi-Fi</div>
+    </button>
+    <button class="nav-btn" onclick="switchScreen('accounts')">
+      <div class="nav-icon">💰</div>
+      <div>Accounts</div>
+    </button>
+  </nav>
+
+  <script>
+    const categories = ['All', 'Fashion', 'Catering', 'Tech', 'Beauty', 'Home & Living', 'Sports', 'Accessories'];
+    let products = [];
+    let currentCategory = 'All';
+    let cart = JSON.parse(localStorage.getItem('um_cart') || '[]');
+    let currentSlide = 0;
+
+
+    function initGSI() {
+      window.google.accounts.id.initialize({
+        client_id: 'your-google-client-id.apps.googleusercontent.com', // To be replaced by server-side injection if possible, or just leave as placeholder
+        callback: handleGoogleCallback
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById("g_id_signin"),
+        { theme: "outline", size: "large", width: "100%" }
+      );
+      window.google.accounts.id.prompt(); // also display the One Tap dialog
+    }
+
+    // Call initGSI after GSI library is loaded or in init
+
+    async function init() {
+      initGSI();
+      await fetchProducts();
+      renderCategories();
+      filterStalls();
+      updateCartUI();
+      updateAccountingUI();
+      setInterval(autoSlide, 5000);
+    }
+
+    async function fetchProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        products = data.map(p => ({
+          id: p.id,
+          vendor_id: p.vendor_id,
+          name: p.name,
+          category: p.category,
+          price: parseFloat(p.price),
+          stall: p.vendor_name || 'Unity Stall',
+          rating: 4.5,
+          reviews: Math.floor(Math.random() * 50),
+          image: p.images && p.images.length > 0 ? p.images[0] : 'https://images.unsplash.com/photo-1580915411954-282cb1b0d780?w=400&auto=format',
+          level: 1
+        }));
+      } catch (err) {
+        console.error('Failed to fetch products:', err);
+      }
+    }
+
+    function renderCategories() {
+      const container = document.getElementById('categories');
+      container.innerHTML = categories.map(cat => `
+        <button class="cat-btn ${cat === currentCategory ? 'active' : ''}" onclick="selectCategory('${cat}')">
+          ${cat}
+        </button>
+      `).join('');
+    }
+
+    function selectCategory(cat) {
+      currentCategory = cat;
+      renderCategories();
+      filterStalls();
+    }
+
+    function filterStalls() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = products.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(search) ||
+                              p.stall.toLowerCase().includes(search) ||
+                              p.category.toLowerCase().includes(search);
+        const matchesCat = currentCategory === 'All' || p.category === currentCategory;
+        return matchesSearch && matchesCat;
+      });
+
+      const container = document.getElementById('stalls');
+      document.getElementById('results').textContent = `${filtered.length} items found`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">No products found matching your search.</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(p => `
+        <div class="card">
+          <div class="card-img-container">
+            <img src="${p.image}" class="card-img" alt="${p.name}" loading="lazy">
+            ${p.rating > 4.7 ? '<span class="card-badge">Top Rated</span>' : ''}
+          </div>
+          <div class="card-content">
+            <div class="card-category">${p.category} • ${p.stall}</div>
+            <h3 class="card-name">${p.name}</h3>
+            <div class="card-meta">
+              <span>⭐ ${p.rating}</span>
+              <span>(${p.reviews})</span>
+              <span>• L${p.level}</span>
+            </div>
+            <div class="card-price">K${p.price.toFixed(2)}</div>
+            <div class="card-actions">
+              <button class="btn-cart" onclick="addToCart(${p.id})">
+                <span>🛒</span> Add
+              </button>
+              <button class="btn-whatsapp" onclick="openWhatsApp('${p.stall}', '${p.name}')">
+                <span>💬</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addToCart(productId) {
+      const product = products.find(p => p.id === productId);
+      if (product) {
+        const existing = cart.find(item => item.id === productId);
+        if (existing) {
+          existing.quantity++;
+        } else {
+          cart.push({ ...product, quantity: 1 });
+        }
+        saveCart();
+        updateCartUI();
+        updateAccountingUI();
+        showNotification(`Added ${product.name} to cart`);
+      }
+    }
+
+    function saveCart() {
+      localStorage.setItem('um_cart', JSON.stringify(cart));
+    }
+
+    function updateCartUI() {
+      const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+      document.getElementById('cartCount').textContent = count;
+
+      const cartItemsContainer = document.getElementById('cartItems');
+      if (cart.length === 0) {
+        cartItemsContainer.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding: 2rem;">Your cart is empty.</p>';
+        document.getElementById('cartTotal').textContent = 'K0.00';
+        return;
+      }
+
+      cartItemsContainer.innerHTML = cart.map(item => `
+        <div class="cart-item">
+          <img src="${item.image}" class="cart-item-img">
+          <div class="cart-item-info">
+            <h4>${item.name}</h4>
+            <p>K${item.price.toFixed(2)} x ${item.quantity}</p>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+             <button onclick="removeFromCart(${item.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;">Remove</button>
+          </div>
+        </div>
+      `).join('');
+
+      const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      document.getElementById('cartTotal').textContent = `K${total.toFixed(2)}`;
+    }
+
+    function removeFromCart(productId) {
+      cart = cart.filter(item => item.id !== productId);
+      saveCart();
+      updateCartUI();
+      updateAccountingUI();
+    }
+
+    function toggleCart() {
+      document.getElementById('cartModal').classList.toggle('show');
+    }
+
+    function openWhatsApp(stall, productName) {
+      const msg = encodeURIComponent(`Hi ${stall}, I'm interested in "${productName}" I saw on Garden City SME Market SME centre!`);
+      window.open(`https://wa.me/67570000000?text=${msg}`, '_blank');
+    }
+
+    function switchScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+      document.getElementById(screenId).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.nav-btn')).find(btn => btn.onclick.toString().includes(screenId));
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    function openAuthModal(mode = 'login') {
+      document.getElementById('authModal').classList.add('show');
+      setAuthMode(mode);
+    }
+
+    function setAuthMode(mode) {
+      const title = document.getElementById('modalTitle');
+      const toggleMsg = document.getElementById('authToggleMsg');
+      const loginForm = document.getElementById('loginForm');
+      const registerForm = document.getElementById('registerForm');
+
+      if (mode === 'register') {
+        title.innerHTML = '🛍️ Create Shopper Account';
+        toggleMsg.innerHTML = 'Already have an account? <a href="#" onclick="setAuthMode(\'login\')" style="color: var(--text-accent);">Sign in here</a>';
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+      } else {
+        title.innerHTML = '🛍️ Shopper Sign In';
+        toggleMsg.innerHTML = 'Don\'t have an account? <a href="#" onclick="setAuthMode(\'register\')" style="color: var(--text-accent);">Sign up here</a>';
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+      }
+    }
+
+    function closeAuthModal() { document.getElementById('authModal').classList.remove('show'); }
+
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch('/api/auth/customer/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        localStorage.setItem('um_user', JSON.stringify(data.user));
+        alert('Login successful!');
+        closeAuthModal();
+        checkUserSession();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    document.getElementById('registerForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        phone: document.getElementById('regPhone').value,
+        password: document.getElementById('regPassword').value
+      };
+
+      try {
+        const res = await fetch('/api/auth/customer/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        alert('Registration successful! Please sign in.');
+        setAuthMode('login');
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    function openCheckoutModal() {
+      if (cart.length === 0) return;
+      const user = JSON.parse(localStorage.getItem('um_user'));
+      if (user) {
+        document.getElementById('custName').value = user.name || '';
+        document.getElementById('custPhone').value = user.phone || '';
+      }
+      document.getElementById('checkoutModal').classList.add('show');
+    }
+
+    function closeCheckoutModal() {
+      document.getElementById('checkoutModal').classList.remove('show');
+    }
+
+    document.getElementById('checkoutForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('custName').value;
+      const phone = document.getElementById('custPhone').value;
+      const vendorIds = [...new Set(cart.map(item => item.vendor_id))];
+      try {
+        for (const vId of vendorIds) {
+          const vendorItems = cart.filter(item => item.vendor_id === vId);
+          const total = vendorItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vendor_id: vId,
+              customer_name: name,
+              customer_phone: phone,
+              items: vendorItems,
+              total_price: total
+            })
+          });
+        }
+        alert('Order placed successfully! Vendors will contact you via WhatsApp.');
+        cart = [];
+        saveCart();
+        updateCartUI();
+        updateAccountingUI();
+        closeCheckoutModal();
+        if (document.getElementById('cartModal').classList.contains('show')) toggleCart();
+      } catch (err) {
+        alert('Failed to place order: ' + err.message);
+      }
+    };
+
+    function showNotification(msg) {
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:var(--bg-card); border:1px solid var(--primary); padding:12px 24px; border-radius:30px; z-index:1000; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2000);
+    }
+
+    function goToSlide(n) {
+      currentSlide = n;
+      document.getElementById('sliderContainer').style.transform = `translateX(-${currentSlide * 100}%)`;
+      document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    }
+
+    function autoSlide() {
+      currentSlide = (currentSlide + 1) % 2;
+      goToSlide(currentSlide);
+    }
+
+    function updateAccountingUI() {
+      const vendor = JSON.parse(localStorage.getItem('um_vendor'));
+      if (!vendor) {
+        document.getElementById('accAuthMsg').classList.remove('hidden');
+        document.getElementById('accDashboard').classList.add('hidden');
+        return;
+      }
+      document.getElementById('accAuthMsg').classList.add('hidden');
+      document.getElementById('accDashboard').classList.remove('hidden');
+      const transactions = JSON.parse(localStorage.getItem('um_accounting_vendor_' + vendor.id) || '[]');
+      const sales = transactions.filter(t => t.type === 'sale').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const exp = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      document.getElementById('accSales').textContent = `K${sales.toFixed(2)}`;
+      document.getElementById('accExp').textContent = `K${exp.toFixed(2)}`;
+      document.getElementById('accProfit').textContent = `K${(sales - exp).toFixed(2)}`;
+    }
+
+    checkUserSession();
+    // Customer Session Management
+    function checkUserSession() {
+      const user = JSON.parse(localStorage.getItem('um_user'));
+      const headerActions = document.querySelector('.header-actions');
+      const signInBtn = headerActions.querySelector('button[onclick="openAuthModal(\'login\')"]');
+      const signUpBtn = headerActions.querySelector('button[onclick="openAuthModal(\'register\')"]');
+
+      if (user) {
+        if (signInBtn) signInBtn.style.display = 'none';
+        if (signUpBtn) signUpBtn.style.display = 'none';
+
+        // Add User Profile button
+        if (!document.getElementById('userProfileBtn')) {
+           const profileBtn = document.createElement('button');
+           profileBtn.id = 'userProfileBtn';
+           profileBtn.className = 'auth-btn';
+           profileBtn.style.background = 'transparent';
+           profileBtn.style.border = '1px solid var(--text-accent)';
+           profileBtn.style.color = 'var(--text-accent)';
+           profileBtn.innerHTML = `👤 ${user.name.split(' ')[0]}`;
+           profileBtn.onclick = () => {
+             if (confirm('Sign out?')) {
+               localStorage.removeItem('um_user');
+               location.reload();
+             }
+           };
+           headerActions.appendChild(profileBtn);
+        }
+      }
+    }
+
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId      : 'your-facebook-app-id', // Replaced dynamically or from config
+        cookie     : true,
+        xfbml      : true,
+        version    : 'v18.0'
+      });
+    };
+
+
+    function handleGoogleCallback(response) {
+      const payload = JSON.parse(atob(response.credential.split('.')[1]));
+      handleSocialAuth('google', {
+        name: payload.name,
+        email: payload.email,
+        id: payload.sub,
+        token: response.credential
+      });
+    }
+
+    async function socialLogin(provider) {
+      if (provider === 'google') {
+        window.google.accounts.id.prompt();
+      } else if (provider === 'facebook') {
+        FB.login(function(response) {
+          if (response.authResponse) {
+            FB.api('/me', {fields: 'name,email'}, function(userData) {
+              handleSocialAuth(provider, {
+                name: userData.name,
+                email: userData.email,
+                id: userData.id,
+                token: response.authResponse.accessToken
+              });
+            });
+          }
+        }, {scope: 'public_profile,email'});
+      }
+    }
+
+    async function handleSocialAuth(provider, userData) {
+      try {
+        const res = await fetch('/api/auth/social', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, role: 'customer', ...userData })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        localStorage.setItem('um_user', JSON.stringify(data.user));
+        alert(`Logged in with ${provider.charAt(0).toUpperCase() + provider.slice(1)}!`);
+        closeAuthModal();
+        checkUserSession();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // Call checkUserSession on init
+
+    init();
+  </script>
+</body>
+</html>
