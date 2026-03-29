@@ -1,7 +1,7 @@
 {
-  "name": "garden-city-sme-market",
+  "name": "garden-city-sme",
   "version": "1.0.0",
-  "description": "Backend API for Garden City SME Market SME centre platform",
+  "description": "Backend API for Garden City SME platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
