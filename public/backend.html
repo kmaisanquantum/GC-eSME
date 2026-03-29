@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Garden City SME Market SME centre | Vendor Dashboard</title>
+  <style>
+    :root {
+      --primary: #ca8a04;
+      --primary-hover: #a16207;
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --bg-header: #000000;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-accent: #eab308;
+      --border: #334155;
+      --success: #10b981;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: #000;
+      height: 100vh;
+      position: fixed;
+      left: 0; top: 0;
+      border-right: 1px solid var(--border);
+      padding: 2rem 1.5rem;
+    }
+
+    .main-content {
+      margin-left: 260px;
+      padding: 2rem;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      color: var(--text-accent);
+      font-weight: 800;
+      font-size: 1.5rem;
+      margin-bottom: 2.5rem;
+      display: block;
+      text-decoration: none;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      background: var(--bg-card);
+      color: var(--text-accent);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .stat-label { color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 1.75rem; font-weight: 800; color: var(--text-accent); }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .card-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--text-accent); }
+
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th { text-align: left; padding: 12px; color: var(--text-muted); font-size: 0.875rem; border-bottom: 1px solid var(--border); }
+    td { padding: 16px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+
+    .status-pill {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .status-active { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary { background: var(--primary); color: #000; }
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+    .label { display: block; color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .input {
+      width: 100%; padding: 10px 12px; background: var(--bg-dark);
+      border: 1px solid var(--border); border-radius: 8px; color: #fff;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Auth screen */
+    .auth-overlay {
+      position: fixed; top:0; left:0; right:0; bottom:0;
+      background: var(--bg-dark); z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .auth-card {
+      background: var(--bg-card); width: 100%; max-width: 400px;
+      padding: 2rem; border-radius: 16px; border: 1px solid var(--border);
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; padding: 1rem; padding-bottom: 5rem; }
+      .mobile-nav {
+        display: flex !important;
+        position: fixed; bottom: 0; left: 0; right: 0;
+        background: #000; border-top: 1px solid var(--border);
+        justify-content: space-around; padding: 12px; z-index: 900;
+      }
+      .mobile-nav .nav-link { margin-bottom: 0; padding: 8px; flex-direction: column; font-size: 0.65rem; gap: 4px; }
+      .mobile-nav .nav-link i { font-size: 1.25rem; }
+    }
+
+    .mobile-nav { display: none; }
+
+    .mall-link {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+  </style>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+
+</head>
+<body>
+
+  <div id="authScreen" class="auth-overlay">
+    <div class="auth-card">
+      <form id="loginForm">
+        <div class="form-group">
+        <h2 style="color: var(--text-accent); margin-bottom: 1.5rem; text-align: center;">🏪 Vendor Sign In</h2>
+          <label class="label">Email Address</label>
+          <input type="email" id="loginEmail" class="input" placeholder="vendor@example.com" required>
+        </div>
+        <div class="form-group">
+          <label class="label">Password</label>
+          <input type="password" id="loginPassword" class="input" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Sign In</button>
+        <div style="margin: 1.5rem 0; display: flex; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 0.8rem;">
+          <div style="flex: 1; height: 1px; background: var(--border);"></div>
+          <span>OR</span>
+          <div style="flex: 1; height: 1px; background: var(--border);"></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div id="g_id_signin"></div>
+          <button type="button" class="btn" onclick="socialLogin('facebook')" style="background: #1877f2; color: #fff; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <svg style="width:18px;height:18px" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96A10 10 0 0 0 22 12.06C22 6.53 17.5 2.04 12 2.04Z" /></svg>
+            Continue with Facebook
+          </button>
+        </div>
+
+        <p style="text-align: center; margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);">
+          Don't have a store? <a href="#" onclick="toggleAuthMode()" style="color: var(--text-accent);">Register here</a>
+        </p>
+        <p style="text-align: center; margin-top: 1rem; font-size: 0.8rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+          Are you a Customer? <a href="index.html" style="color: var(--text-accent); font-weight: 600;">Go to Mall</a>
+        </p>
+      </form>
+
+      <form id="registerForm" class="hidden">
+        <h2 style="color: var(--text-accent); margin-bottom: 1.5rem; text-align: center;">🏪 Create Vendor Account</h2>
+        <div class="form-group">
+          <label class="label">Store Name</label>
+          <input type="text" id="regName" class="input" placeholder="e.g. Sepik Crafts" required>
+        </div>
+        <div class="form-group">
+          <label class="label">Email Address</label>
+          <input type="email" id="regEmail" class="input" required>
+        </div>
+        <div class="form-group">
+          <label class="label">Password</label>
+          <input type="password" id="regPassword" class="input" required>
+        </div>
+        <div class="form-group">
+          <label class="label">Phone</label>
+          <input type="text" id="regPhone" class="input" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Create Store</button>
+        <p style="text-align: center; margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);">
+          Already have a store? <a href="#" onclick="toggleAuthMode()" style="color: var(--text-accent);">Login here</a>
+        </p>
+        <p style="text-align: center; margin-top: 1rem; font-size: 0.8rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+          Are you a Customer? <a href="index.html" style="color: var(--text-accent); font-weight: 600;">Go to Mall</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <aside class="sidebar hidden" id="sidebar">
+    <a href="/" class="logo">Unity SME centre</a>
+    <nav>
+      <a onclick="switchTab('overview')" id="nav-overview" class="nav-link active">📊 Overview</a>
+      <a onclick="switchTab('accounts')" id="nav-accounts" class="nav-link">📉 Accounts</a>
+      <a onclick="switchTab('orders')" id="nav-orders" class="nav-link">📝 Orders</a>
+      <a onclick="switchTab('products')" id="nav-products" class="nav-link">📦 Products</a>
+      <a onclick="switchTab('settings')" id="nav-settings" class="nav-link">⚙️ Settings</a>
+      <a onclick="logout()" class="nav-link" style="margin-top: 1rem; color: #ef4444;">🚪 Logout</a>
+      <div class="mall-link">
+        <a href="/" class="nav-link" style="color: var(--success);">🏠 View Mall</a>
+      </div>
+    </nav>
+  </aside>
+
+  <nav class="mobile-nav hidden" id="mobileNav">
+    <a onclick="switchTab('overview')" id="m-nav-overview" class="nav-link active">📊<br>Home</a>
+    <a onclick="switchTab('accounts')" id="m-nav-accounts" class="nav-link">📉<br>Accounts</a>
+    <a onclick="switchTab('orders')" id="m-nav-orders" class="nav-link">📝<br>Orders</a>
+    <a onclick="switchTab('products')" id="m-nav-products" class="nav-link">📦<br>Products</a>
+    <a href="/" class="nav-link" style="color: var(--success);">🏠<br>Mall</a>
+  </nav>
+
+  <main class="main-content hidden" id="mainContent">
+    <div class="header">
+      <h2>Welcome back, <span style="color: var(--text-accent);" id="vendorStoreName">Store Name</span></h2>
+      <a href="#" onclick="logout()" style="color: #ef4444; font-size: 0.8rem; text-decoration: none; font-weight: 600;">Sign Out</a>
+      <button class="btn btn-primary" onclick="switchTab('products')">+ Add Product</button>
+    </div>
+
+    <!-- Orders Tab -->
+    <div id="tab-orders" class="tab-content hidden">
+      <div class="card">
+        <h3 class="card-title">Customer Orders</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTable">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="tab-accounts" class="tab-content hidden">
+      <div class="card" style="padding: 1.5rem; background: linear-gradient(135deg, var(--bg-card), #1e293b);">
+        <h3 style="color: var(--text-accent); margin-bottom: 1rem;">📈 SME Financial Summary</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Sales</div>
+            <div id="accTotalSales" style="color: var(--success); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Expenses</div>
+            <div id="accTotalExpenses" style="color: #ef4444; font-size: 1.25rem; font-weight: 700;">K0.00</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Net Profit</div>
+            <div id="accNetProfit" style="color: var(--primary); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">➕ Record Transaction (Source Document)</h3>
+        <form id="accountingForm" onsubmit="addTransaction(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+          <div>
+            <label class="label">Date</label>
+            <input type="date" id="accDate" class="input" required>
+          </div>
+          <div>
+            <label class="label">Type</label>
+            <select id="accType" class="input">
+              <option value="sale">Sale (Income)</option>
+              <option value="expense">Expense (Cost)</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Amount (K)</label>
+            <input type="number" id="accAmount" class="input" step="0.01" placeholder="0.00" required>
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <label class="label">Description / Source Doc Ref</label>
+            <input type="text" id="accDesc" class="input" placeholder="e.g., Receipt #123, Cash Sale #001" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="grid-column: 1 / -1;">Record Transaction</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">📄 Transaction History</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr style="text-align: left;">
+                <th>Date</th>
+                <th>Description</th>
+                <th style="text-align: right;">Amount</th>
+                <th style="text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="accTransactionBody">
+              <!-- Transactions will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="tab-overview" class="tab-content">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Store Views</div>
+          <div class="stat-value">--</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Products</div>
+          <div id="statProducts" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Inquiries</div>
+          <div class="stat-value">--</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <button onclick="switchTab('orders')" class="btn" style="background: rgba(234, 179, 8, 0.1); color: var(--text-accent); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1.5rem; gap: 8px;">
+           <span style="font-size: 1.5rem;">📝</span>
+           <span>Manage Orders</span>
+        </button>
+        <button onclick="switchTab('products')" class="btn" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1.5rem; gap: 8px;">
+           <span style="font-size: 1.5rem;">📦</span>
+           <span>Add Products</span>
+        </button>
+        <button onclick="switchTab('accounts')" class="btn" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1.5rem; gap: 8px;">
+           <span style="font-size: 1.5rem;">📉</span>
+           <span>Accounting</span>
+        </button>
+        <button onclick="switchTab('settings')" class="btn" style="background: rgba(148, 163, 184, 0.1); color: var(--text-muted); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 1.5rem; gap: 8px;">
+           <span style="font-size: 1.5rem;">⚙️</span>
+           <span>Store Profile</span>
+        </button>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Recent Products</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recentProductsTable">
+              <tr><td colspan="4" style="text-align:center; padding:2rem;">No products found.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products Tab -->
+    <div id="tab-products" class="tab-content hidden">
+      <div class="card">
+        <h3 class="card-title">Add New Product</h3>
+        <form id="addProductForm">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Product Name</label>
+              <input type="text" id="pName" class="input" placeholder="e.g., Carved Mask" required>
+            </div>
+            <div class="form-group">
+              <label class="label">Category</label>
+              <select id="pCategory" class="input">
+                <option>Fashion</option>
+                <option>Art</option>
+                <option>Home</option>
+                <option>Tech</option>
+                <option>Beauty</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="label">Price (PGK)</label>
+              <input type="number" id="pPrice" class="input" placeholder="0.00" step="0.01" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label">Description</label>
+            <textarea id="pDesc" class="input" style="height: 100px;"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Save Product</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Manage Products</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allProductsTable">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tab-settings" class="tab-content hidden">
+      <div class="card">
+        <h3 class="card-title">Store Settings</h3>
+        <form id="storeSettingsForm">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Store Name</label>
+              <input type="text" id="sName" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="label">Category</label>
+              <input type="text" id="sCategory" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="label">Phone</label>
+              <input type="text" id="sPhone" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="label">Location</label>
+              <input type="text" id="sLocation" class="input">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label">Description</label>
+            <textarea id="sDesc" class="input" style="height: 100px;"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Update Store Info</button>
+        </form>
+      </div>
+      <div class="card" style="margin-top: 1rem; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);">
+        <h3 class="card-title" style="color: #ef4444;">Account Control</h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Sign out of your vendor account. Your data is automatically saved.</p>
+        <button onclick="logout()" class="btn" style="background: #ef4444; color: #fff;">Sign Out</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+
+    function handleGoogleCallback(response) {
+      const payload = JSON.parse(atob(response.credential.split('.')[1]));
+      handleSocialAuth('google', {
+        name: payload.name,
+        email: payload.email,
+        id: payload.sub,
+        token: response.credential
+      });
+    }
+
+    function initGSI() {
+      window.google.accounts.id.initialize({
+        client_id: 'your-google-client-id.apps.googleusercontent.com',
+        callback: handleGoogleCallback
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById("g_id_signin"),
+        { theme: "outline", size: "large", width: "100%" }
+      );
+    }
+
+    async function socialLogin(provider) {
+      if (provider === 'google') {
+        window.google.accounts.id.prompt();
+      } else if (provider === 'facebook') {
+        FB.login(function(response) {
+          if (response.authResponse) {
+            FB.api('/me', {fields: 'name,email'}, function(userData) {
+              handleSocialAuth(provider, {
+                name: userData.name,
+                email: userData.email,
+                id: userData.id,
+                token: response.authResponse.accessToken
+              });
+            });
+          }
+        }, {scope: 'public_profile,email'});
+      }
+    }
+
+    async function handleSocialAuth(provider, userData) {
+      try {
+        const res = await fetch(`${API_URL}/auth/social`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, role: 'vendor', ...userData })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        localStorage.setItem('um_vendor', JSON.stringify(data.vendor));
+        currentVendor = data.vendor;
+        alert(`Logged in with ${provider.charAt(0).toUpperCase() + provider.slice(1)}!`);
+        showDashboard();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId      : 'your-facebook-app-id',
+        cookie     : true,
+        xfbml      : true,
+        version    : 'v18.0'
+      });
+    };
+
+    let currentVendor = JSON.parse(localStorage.getItem('um_vendor'));
+    const API_URL = '/api';
+
+    // Accounting Logic for Vendor
+    let accountingTransactions = [];
+
+    function updateAccountingUI() {
+      const tbody = document.getElementById('accTransactionBody');
+      const salesEl = document.getElementById('accTotalSales');
+      const expensesEl = document.getElementById('accTotalExpenses');
+      const netProfitEl = document.getElementById('accNetProfit');
+
+      if (!tbody) return;
+
+      if (!accountingTransactions || accountingTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 2rem; color:var(--text-muted);">No transactions recorded yet.</td></tr>';
+        salesEl.textContent = 'K0.00';
+        expensesEl.textContent = 'K0.00';
+        netProfitEl.textContent = 'K0.00';
+        return;
+      }
+
+      let totalSales = 0;
+      let totalExpenses = 0;
+
+      tbody.innerHTML = accountingTransactions
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .map((t, index) => {
+          const amount = parseFloat(t.amount);
+          if (t.type === 'sale') totalSales += amount;
+          else totalExpenses += amount;
+
+          return `
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px;">${t.date}</td>
+              <td style="padding: 12px;">
+                <span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; margin-right: 4px; background: ${t.type === 'sale' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${t.type === 'sale' ? 'var(--success)' : '#ef4444'}; text-transform: uppercase;">${t.type}</span>
+                ${t.desc}
+              </td>
+              <td style="padding: 12px; text-align: right; font-weight: 600; color: ${t.type === 'sale' ? 'var(--success)' : '#ef4444'};">${t.type === 'sale' ? '' : '-'}${amount.toFixed(2)}</td>
+              <td style="padding: 12px; text-align: center;">
+                <button onclick="deleteTransaction(${index})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size: 1.25rem;">×</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+      const netProfit = totalSales - totalExpenses;
+      salesEl.textContent = `K${totalSales.toFixed(2)}`;
+      expensesEl.textContent = `K${totalExpenses.toFixed(2)}`;
+      netProfitEl.textContent = `K${netProfit.toFixed(2)}`;
+      netProfitEl.style.color = netProfit >= 0 ? 'var(--success)' : '#ef4444';
+    }
+
+    function addTransaction(e) {
+      e.preventDefault();
+      const date = document.getElementById('accDate').value;
+      const type = document.getElementById('accType').value;
+      const amount = document.getElementById('accAmount').value;
+      const desc = document.getElementById('accDesc').value;
+
+      accountingTransactions.push({ date, type, amount, desc });
+      saveAccounting();
+      updateAccountingUI();
+      e.target.reset();
+      alert('Transaction recorded successfully');
+    }
+
+    function deleteTransaction(index) {
+      if (confirm('Delete this transaction?')) {
+        accountingTransactions.splice(index, 1);
+        saveAccounting();
+        updateAccountingUI();
+      }
+    }
+
+    function saveAccounting() {
+      if (currentVendor) {
+        localStorage.setItem('um_accounting_vendor_' + currentVendor.id, JSON.stringify(accountingTransactions));
+      }
+    }
+
+    function init() {
+      initGSI();
+      if (currentVendor) {
+        showDashboard();
+      }
+    }
+
+    function toggleAuthMode() {
+      document.getElementById('loginForm').classList.toggle('hidden');
+      document.getElementById('registerForm').classList.toggle('hidden');
+    }
+
+    // Login
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        localStorage.setItem('um_vendor', JSON.stringify(data.vendor));
+        currentVendor = data.vendor;
+        showDashboard();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    // Register
+    document.getElementById('registerForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        password: document.getElementById('regPassword').value,
+        phone: document.getElementById('regPhone').value,
+        category: 'General',
+        location: 'Garden City SME Market'
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        alert('Registration successful! Please login.');
+        toggleAuthMode();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    function showDashboard() {
+      accountingTransactions = JSON.parse(localStorage.getItem("um_accounting_vendor_" + currentVendor.id) || "[]");
+      updateAccountingUI();
+      document.getElementById('authScreen').classList.add('hidden');
+      document.getElementById('sidebar').classList.remove('hidden');
+      document.getElementById('mobileNav').classList.remove('hidden');
+      document.getElementById('mainContent').classList.remove('hidden');
+      document.getElementById('vendorStoreName').textContent = currentVendor.name;
+      loadStoreData();
+    }
+
+    function logout() {
+      localStorage.removeItem('um_vendor');
+      document.getElementById('sidebar').classList.add('hidden');
+      document.getElementById('mobileNav').classList.add('hidden');
+      document.getElementById('mainContent').classList.add('hidden');
+      document.getElementById('authScreen').classList.remove('hidden');
+      location.reload();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      const desktopNav = document.getElementById(`nav-${tabId}`);
+      const mobileNav = document.getElementById(`m-nav-${tabId}`);
+      if (desktopNav) desktopNav.classList.add('active');
+      if (mobileNav) mobileNav.classList.add('active');
+    }
+
+    async function loadStoreData() {
+      try {
+        // Load products
+        const res = await fetch(`${API_URL}/vendors/${currentVendor.id}/products`);
+        const products = await res.json();
+
+        document.getElementById('statProducts').textContent = products.length;
+
+        const renderProduct = (p) => `
+          <tr>
+            <td>${p.name}</td>
+            <td>K${parseFloat(p.price).toFixed(2)}</td>
+            <td><span class="status-pill status-active">${p.status}</span></td>
+            <td>
+               <button onclick="deleteProduct(${p.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;">Delete</button>
+            </td>
+          </tr>
+        `;
+
+        document.getElementById('recentProductsTable').innerHTML = products.slice(0, 5).map(renderProduct).join('') || '<tr><td colspan="4" style="text-align:center; padding:2rem;">No products found.</td></tr>';
+        document.getElementById('allProductsTable').innerHTML = products.map(renderProduct).join('') || '<tr><td colspan="4" style="text-align:center; padding:2rem;">No products found.</td></tr>';
+
+        // Load Orders
+        const oRes = await fetch(`${API_URL}/vendors/${currentVendor.id}/orders`);
+        const orders = await oRes.json();
+
+        const ordersBody = document.getElementById('ordersTable');
+        ordersBody.innerHTML = orders.map(o => {
+          const items = JSON.parse(o.items);
+          const itemsList = items.map(i => `${i.name} (x${i.quantity})`).join(', ');
+          return `
+            <tr>
+              <td>${new Date(o.created_at).toLocaleDateString()}</td>
+              <td>${o.customer_name}<br><small>${o.customer_phone}</small></td>
+              <td style="max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${itemsList}</td>
+              <td>K${parseFloat(o.total_price).toFixed(2)}</td>
+              <td><span class="status-pill ${o.status === 'completed' ? 'status-active' : ''}" style="background: ${o.status === 'pending' ? 'rgba(234, 179, 8, 0.1)' : ''}; color: ${o.status === 'pending' ? '#eab308' : ''}">${o.status}</span></td>
+              <td>
+                ${o.status === 'pending' ? `<button onclick="updateOrderStatus(${o.id}, 'completed')" class="btn btn-primary" style="padding: 4px 8px; font-size: 0.75rem;">Complete</button>` : ''}
+              </td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="6" style="text-align:center; padding:2rem;">No orders yet.</td></tr>';
+
+        // Fill settings
+        const vRes = await fetch(`${API_URL}/vendors/me/${currentVendor.id}`);
+        const vendor = await vRes.json();
+        document.getElementById('sName').value = vendor.name;
+        document.getElementById('sCategory').value = vendor.category;
+        document.getElementById('sPhone').value = vendor.phone;
+        document.getElementById('sLocation').value = vendor.location || '';
+        document.getElementById('sDesc').value = vendor.description || '';
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Add Product
+    document.getElementById('addProductForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        vendor_id: currentVendor.id,
+        name: document.getElementById('pName').value,
+        category: document.getElementById('pCategory').value,
+        price: document.getElementById('pPrice').value,
+        description: document.getElementById('pDesc').value,
+        status: 'active'
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/products`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        await res.json();
+        alert('Product added!');
+        e.target.reset();
+        loadStoreData();
+        updateAccountingUI();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    // Update Store
+    document.getElementById('storeSettingsForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('sName').value,
+        category: document.getElementById('sCategory').value,
+        phone: document.getElementById('sPhone').value,
+        location: document.getElementById('sLocation').value,
+        description: document.getElementById('sDesc').value
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/vendors/${currentVendor.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        await res.json();
+        alert('Store updated!');
+        currentVendor.name = payload.name;
+        document.getElementById('vendorStoreName').textContent = currentVendor.name;
+        localStorage.setItem('um_vendor', JSON.stringify(currentVendor));
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    async function deleteProduct(id) {
+      if (confirm('Delete this product?')) {
+        await fetch(`${API_URL}/products/${id}`, { method: 'DELETE' });
+        loadStoreData();
+        updateAccountingUI();
+      }
+    }
+
+    async function updateOrderStatus(id, status) {
+      try {
+        await fetch(`${API_URL}/orders/${id}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        loadStoreData();
+      } catch (err) {
+        alert('Failed to update status');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

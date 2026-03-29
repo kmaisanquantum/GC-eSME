@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Portal | Garden City SME Market SME centre</title>
+  <style>
+    :root {
+      --primary: #ca8a04;
+      --bg-dark: #111827;
+      --bg-card: #1f2937;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-accent: #eab308;
+      --border: #374151;
+      --success: #10b981;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-dark); color: var(--text-main); }
+    .auth-screen { height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: var(--bg-card); padding: 2rem; border-radius: 12px; border: 1px solid var(--border); width: 100%; max-width: 400px; }
+    .input { width: 100%; padding: 10px; margin-bottom: 1rem; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; color: #fff; }
+    .btn { width: 100%; padding: 12px; background: var(--primary); color: #000; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .dashboard { display: none; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .stat-card { background: var(--bg-card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
+    .stat-label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 1.5rem; font-weight: 800; color: var(--text-accent); }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th { text-align: left; padding: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .hidden { display: none; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <div id="authScreen" class="auth-screen">
+    <div class="card">
+      <h2 style="margin-bottom: 1.5rem; color: var(--text-accent); text-align: center;">Admin Login</h2>
+      <form id="loginForm">
+        <input type="text" id="username" class="input" placeholder="Username" required>
+        <input type="password" id="password" class="input" placeholder="Password" required>
+        <button type="submit" class="btn">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="dashboard" class="dashboard">
+    <div class="header">
+      <h1>Garden City SME Market Admin</h1>
+      <button onclick="logout()" style="background: none; border: none; color: #ef4444; cursor: pointer; font-weight: 600;">Logout</button>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Total Vendors</div>
+        <div id="statVendors" class="stat-value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Products</div>
+        <div id="statProducts" class="stat-value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Orders</div>
+        <div id="statOrders" class="stat-value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Revenue</div>
+        <div id="statRevenue" class="stat-value">K0.00</div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width: 100%; margin-bottom: 2rem;">
+      <h2 style="color: var(--text-accent); margin-bottom: 1rem;">All Orders</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Vendor</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="max-width: 100%; margin-bottom: 2rem;">
+      <h2 style="color: var(--text-accent); margin-bottom: 1rem;">All Vendors</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Category</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vendorsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="max-width: 100%;">
+      <h2 style="color: var(--text-accent); margin-bottom: 1rem;">All Products</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Product</th>
+              <th>Vendor</th>
+              <th>Price</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="productsTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api/admin';
+
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json();
+      if (data.error) alert(data.error);
+      else {
+        localStorage.setItem('um_admin', JSON.stringify(data.admin));
+        showDashboard();
+      }
+    };
+
+    function showDashboard() {
+      document.getElementById('authScreen').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      loadStats();
+      loadOrders();
+      loadVendors();
+      loadProducts();
+    }
+
+    async function loadStats() {
+      const res = await fetch(`${API_URL}/stats`);
+      const stats = await res.json();
+      document.getElementById('statVendors').textContent = stats.totalVendors;
+      document.getElementById('statProducts').textContent = stats.totalProducts;
+      document.getElementById('statOrders').textContent = stats.totalOrders;
+      document.getElementById('statRevenue').textContent = 'K' + parseFloat(stats.totalRevenue).toFixed(2);
+    }
+
+    async function loadOrders() {
+      const res = await fetch(`${API_URL}/orders`);
+      const orders = await res.json();
+      document.getElementById('ordersTable').innerHTML = orders.map(o => {
+        const items = JSON.parse(o.items);
+        const itemList = items.map(i => `${i.name} (x${i.quantity})`).join(', ');
+        return `
+          <tr>
+            <td>${new Date(o.created_at).toLocaleDateString()}</td>
+            <td>${o.customer_name}<br><small>${o.customer_phone}</small></td>
+            <td>${o.vendor_name || 'N/A'}</td>
+            <td title="${itemList}">${itemList.length > 30 ? itemList.substring(0, 30) + '...' : itemList}</td>
+            <td>K${parseFloat(o.total_price).toFixed(2)}</td>
+            <td><span style="color: ${o.status === 'completed' ? 'var(--success)' : 'var(--text-accent)'}">${o.status}</span></td>
+            <td><button onclick="deleteOrder(${o.id})" style="color:#ef4444; background:none; border:none; cursor:pointer;">Delete</button></td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="7" style="text-align:center; padding:1rem;">No orders found.</td></tr>';
+    }
+
+    async function loadVendors() {
+      const res = await fetch(`${API_URL}/vendors`);
+      const vendors = await res.json();
+      document.getElementById('vendorsTable').innerHTML = vendors.map(v => `
+        <tr>
+          <td>${v.id}</td>
+          <td>${v.name}</td>
+          <td>${v.email}</td>
+          <td>${v.category}</td>
+          <td><button onclick="deleteVendor(${v.id})" style="color:#ef4444; background:none; border:none; cursor:pointer;">Delete</button></td>
+        </tr>
+      `).join('') || '<tr><td colspan="5" style="text-align:center; padding:1rem;">No vendors found.</td></tr>';
+    }
+
+    async function loadProducts() {
+      const res = await fetch(`${API_URL}/products`);
+      const products = await res.json();
+      document.getElementById('productsTable').innerHTML = products.map(p => `
+        <tr>
+          <td>${p.id}</td>
+          <td>${p.name}</td>
+          <td>${p.vendor_name}</td>
+          <td>K${parseFloat(p.price).toFixed(2)}</td>
+          <td><button onclick="deleteProduct(${p.id})" style="color:#ef4444; background:none; border:none; cursor:pointer;">Delete</button></td>
+        </tr>
+      `).join('') || '<tr><td colspan="5" style="text-align:center; padding:1rem;">No products found.</td></tr>';
+    }
+
+    async function deleteOrder(id) {
+      if (confirm('Delete this order record?')) {
+        await fetch(`${API_URL}/orders/${id}`, { method: 'DELETE' });
+        loadOrders();
+        loadStats();
+      }
+    }
+
+    async function deleteVendor(id) {
+      if (confirm('Are you sure you want to delete this vendor? This action is permanent.')) {
+        await fetch(`${API_URL}/vendors/${id}`, { method: 'DELETE' });
+        loadVendors();
+        loadStats();
+      }
+    }
+
+    async function deleteProduct(id) {
+      if (confirm('Are you sure you want to delete this product?')) {
+        await fetch(`${API_URL}/products/${id}`, { method: 'DELETE' });
+        loadProducts();
+        loadStats();
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('um_admin');
+      location.reload();
+    }
+
+    if (localStorage.getItem('um_admin')) showDashboard();
+  </script>
+</body>
+</html>
