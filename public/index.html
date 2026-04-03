@@ -537,13 +537,17 @@
     }
     .acc-stat { text-align: center; padding: 1rem; }
     .acc-val { font-size: 1.5rem; font-weight: 800; color: var(--text-accent); }
+    .app-footer { padding-bottom: 100px; background: var(--bg-header); border-top: 1px solid var(--border); padding: 2rem 1rem; text-align: center; font-size: 0.85rem; color: var(--text-muted); }
+    .app-footer h4 { color: var(--text-accent); margin-bottom: 1rem; }
+    .app-footer p { margin-bottom: 0.5rem; }
+    .app-footer a { color: var(--text-accent); text-decoration: none; }
     .acc-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
   </style>
 </head>
 <body>
 
   <div class="info-bar">
-    A product of <a href="https://www.dspng.tech" target="_blank">Deeps Systems</a>. Supporting Local SMEs in PNG.
+    A product of <a href="https://www.dspng.tech" target="_blank">Deeps Systems</a>. Supporting Local SMEs in PNG. | <a href="#contact-footer">Contact Technical Support</a>
   </div>
 
   <header class="header">
@@ -1270,5 +1274,14 @@
     applyTranslations();
     init();
   </script>
+  <footer id="contact-footer" class="app-footer">
+    <h4>Contact Technical Support</h4>
+    <p>For any related matter to do with the web application:</p>
+    <p>📧 Email: <a href="mailto:wokman@dspng.tech">wokman@dspng.tech</a></p>
+    <p>📞 Phone: (675) 8300 99881</p>
+    <p>💬 Whatsapp: (675) 8300 99881</p>
+    <p>📱 Text: (675) 8300 9881</p>
+    <p style="margin-top: 1rem; font-size: 0.75rem;">&copy; 2024 Garden City SME. All rights reserved.</p>
+  </footer>
 </body>
 </html>

@@ -291,8 +291,11 @@ fetch('http://localhost:3000/api/products', {
 ## 📞 Support
 
 **Created by Deeps Systems**
-- Website: https://www.dspng.tech
+- Website: [https://www.dspng.tech](https://www.dspng.tech)
 - Supporting SMEs and MSMEs in Papua New Guinea 🇵🇬
+- Email: [wokman@dspng.tech](mailto:wokman@dspng.tech)
+- Phone/Whatsapp: (675) 8300 99881
+- Text: (675) 8300 9881
 
 ---
 
