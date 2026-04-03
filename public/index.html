@@ -550,7 +550,7 @@
     <a href="#" class="logo-container" onclick="switchScreen('directory')">
       <h1>Garden City SME</h1>
     </a>
-    <div class="header-actions">
+    <div class="header-actions"><button id="langToggle" onclick="toggleLanguage()" class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: var(--text-accent); margin: 0 10px;">🇵🇳 Tok Pisin</button>
       <button class="cart-trigger" onclick="toggleCart()">
         🛒 <span class="cart-count" id="cartCount">0</span>
       </button>
@@ -643,16 +643,16 @@
       <div id="accDashboard" class="hidden">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1rem;">
           <div class="acc-card acc-stat">
-            <div class="acc-label">Revenue</div>
+            <div class="acc-label" data-t="revenue">Revenue</div>
             <div class="acc-val" id="accSales">K0.00</div>
           </div>
           <div class="acc-card acc-stat">
-            <div class="acc-label">Expenses</div>
+            <div class="acc-label" data-t="expenses">Expenses</div>
             <div class="acc-val" id="accExp">K0.00</div>
           </div>
         </div>
         <div class="acc-card" style="text-align: center;">
-           <div class="acc-label">Estimated Profit</div>
+           <div class="acc-label" data-t="profit">Estimated Profit</div>
            <div class="acc-val" id="accProfit" style="font-size: 2rem;">K0.00</div>
         </div>
         <div style="text-align: center; margin-top: 1rem;">
@@ -781,19 +781,19 @@
   <nav class="nav">
     <button class="nav-btn active" onclick="switchScreen('directory')">
       <div class="nav-icon">🏪</div>
-      <div>Shop</div>
+      <div data-t="shop">Shop</div>
     </button>
     <button class="nav-btn" onclick="switchScreen('vendor')">
       <div class="nav-icon">📤</div>
-      <div>Sell</div>
+      <div data-t="sell">Sell</div>
     </button>
     <button class="nav-btn" onclick="switchScreen('wifi')">
       <div class="nav-icon">📶</div>
-      <div>Wi-Fi</div>
+      <div data-t="wifi">Wi-Fi</div>
     </button>
     <button class="nav-btn" onclick="switchScreen('accounts')">
       <div class="nav-icon">💰</div>
-      <div>Accounts</div>
+      <div data-t="accounts">Accounts</div>
     </button>
   </nav>
 
@@ -1233,6 +1233,41 @@
 
     // Call checkUserSession on init
 
+
+    // Register Service Worker for Offline Sync
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered with scope:', registration.scope);
+          })
+          .catch((error) => {
+            console.error('Service Worker registration failed:', error);
+          });
+      });
+    }
+
+
+    const translations = {"en":{"shop":"Shop","sell":"Sell","wifi":"Wi-Fi","accounts":"Accounts","revenue":"Revenue","expenses":"Expenses","profit":"Estimated Profit","manage_transactions":"Manage Transactions","cart":"Your Shopping Cart","checkout":"Complete Your Order","dashboard":"Vendor Dashboard","products":"Products","orders":"Orders","settings":"Settings","accounting":"Accounting","sign_out":"Sign Out","welcome":"Welcome to Garden City SME","low_stock":"Low Stock Alert"},"tp":{"shop":"Stoa","sell":"Salim","wifi":"Wai-Fai","accounts":"Buk Kibing","revenue":"Mani i kam insait","expenses":"Mani i go ausait","profit":"Seken mani","manage_transactions":"Lukautim mani","cart":"Beg bilong yu","checkout":"Baim olgeta","dashboard":"Dasbot bilong yu","products":"Ol samting","orders":"Ol oda","settings":"Seting","accounting":"Buk Kibing","sign_out":"Givim ap","welcome":"Wanbel long Garden City SME","low_stock":"Sot long ol samting"}};
+    let currentLang = localStorage.getItem('um_lang') || 'en';
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'en' ? 'tp' : 'en';
+      localStorage.setItem('um_lang', currentLang);
+      applyTranslations();
+    }
+
+    function applyTranslations() {
+      const t = translations[currentLang];
+      document.querySelectorAll('[data-t]').forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (t[key]) el.textContent = t[key];
+      });
+      const toggleBtn = document.getElementById('langToggle');
+      if (toggleBtn) toggleBtn.textContent = currentLang === 'en' ? '🇵🇳 Tok Pisin' : '🇬🇧 English';
+    }
+
+    applyTranslations();
     init();
   </script>
 </body>
