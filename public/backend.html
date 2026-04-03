@@ -182,6 +182,9 @@
 
 </head>
 <body>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 
   <div id="authScreen" class="auth-overlay">
     <div class="auth-card">
@@ -303,26 +306,33 @@
 
     <!-- Overview Tab -->
     <div id="tab-accounts" class="tab-content hidden">
-      <div class="card" style="padding: 1.5rem; background: linear-gradient(135deg, var(--bg-card), #1e293b);">
-        <h3 style="color: var(--text-accent); margin-bottom: 1rem;">📈 SME Financial Summary</h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
-          <div>
-            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Sales</div>
-            <div id="accTotalSales" style="color: var(--success); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+        <div class="card" style="padding: 1.5rem; background: var(--bg-card);">
+          <h3 style="color: var(--text-accent); margin-bottom: 1rem;">📈 SME Financial Summary</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
+            <div>
+              <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Sales</div>
+              <div id="accTotalSales" style="color: var(--success); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Expenses</div>
+              <div id="accTotalExpenses" style="color: #ef4444; font-size: 1.25rem; font-weight: 700;">K0.00</div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Net Profit</div>
+              <div id="accNetProfit" style="color: var(--primary); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+            </div>
           </div>
-          <div>
-            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Total Expenses</div>
-            <div id="accTotalExpenses" style="color: #ef4444; font-size: 1.25rem; font-weight: 700;">K0.00</div>
-          </div>
-          <div>
-            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Net Profit</div>
-            <div id="accNetProfit" style="color: var(--primary); font-size: 1.25rem; font-weight: 700;">K0.00</div>
+          <div style="margin-top: 1.5rem;">
+            <button onclick="exportLendingReport()" class="btn btn-primary" style="width: 100%; font-size: 0.875rem;">📄 Export Micro-Lending Readiness Report (6 Mo)</button>
           </div>
         </div>
+        <div class="card" style="padding: 1.5rem; background: var(--bg-card);">
+           <h3 style="color: var(--text-accent); margin-bottom: 1rem;">📊 Revenue vs. Expenses</h3>
+           <canvas id="businessHealthChart" height="200"></canvas>
+        </div>
       </div>
-
-      <div class="card">
-        <h3 class="card-title">➕ Record Transaction (Source Document)</h3>
+<div class="card"><h3 class="card-title">➕ Record Transaction (Source Document)</h3>
         <form id="accountingForm" onsubmit="addTransaction(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
           <div>
             <label class="label">Date</label>
@@ -367,6 +377,7 @@
       </div>
     </div>
     <div id="tab-overview" class="tab-content">
+      <div id="inventoryAlerts" class="hidden" style="margin-bottom: 1.5rem;"></div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Store Views</div>
@@ -588,80 +599,153 @@
     // Accounting Logic for Vendor
     let accountingTransactions = [];
 
-    function updateAccountingUI() {
-      const tbody = document.getElementById('accTransactionBody');
-      const salesEl = document.getElementById('accTotalSales');
-      const expensesEl = document.getElementById('accTotalExpenses');
-      const netProfitEl = document.getElementById('accNetProfit');
 
-      if (!tbody) return;
+    let businessChart = null;
 
-      if (!accountingTransactions || accountingTransactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 2rem; color:var(--text-muted);">No transactions recorded yet.</td></tr>';
-        salesEl.textContent = 'K0.00';
-        expensesEl.textContent = 'K0.00';
-        netProfitEl.textContent = 'K0.00';
-        return;
+    async function updateAccountingUI() {
+      if (!currentVendor) return;
+
+      try {
+        const res = await fetch(`${API_URL}/vendors/${currentVendor.id}/accounting`);
+        const transactions = await res.json();
+
+        const totalSales = transactions.filter(t => t.type === 'sale').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const netProfit = totalSales - totalExpenses;
+
+        document.getElementById('accTotalSales').textContent = `K${totalSales.toFixed(2)}`;
+        document.getElementById('accTotalExpenses').textContent = `K${totalExpenses.toFixed(2)}`;
+        const netProfitEl = document.getElementById('accNetProfit');
+        netProfitEl.textContent = `K${netProfit.toFixed(2)}`;
+        netProfitEl.style.color = netProfit >= 0 ? 'var(--success)' : '#ef4444';
+
+        const tbody = document.getElementById('accTransactionBody');
+        tbody.innerHTML = transactions.map((t, index) => `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 12px 0;">${new Date(t.date).toLocaleDateString()}</td>
+            <td>${t.description}</td>
+
+            <td style="text-align: right; color: ${t.type === 'sale' ? 'var(--success)' : '#ef4444'}; font-weight: 600;">
+              ${t.type === 'sale' ? '+' : '-'}K${parseFloat(t.amount).toFixed(2)}
+            </td>
+            <td style="text-align: right; color: var(--text-muted); font-size: 0.75rem;">K${parseFloat(t.gst || 0).toFixed(2)}</td>
+            <td style="text-align: right; color: var(--text-muted); font-size: 0.75rem;">K${parseFloat(t.swt || 0).toFixed(2)}</td>
+
+            <td style="text-align: center;">
+               <button onclick="deleteTransaction(${t.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;">×</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="4" style="text-align:center; padding:2rem;">No transactions recorded.</td></tr>';
+
+        renderBusinessChart(totalSales, totalExpenses);
+      } catch (err) {
+        console.error('Failed to load accounting data:', err);
       }
-
-      let totalSales = 0;
-      let totalExpenses = 0;
-
-      tbody.innerHTML = accountingTransactions
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .map((t, index) => {
-          const amount = parseFloat(t.amount);
-          if (t.type === 'sale') totalSales += amount;
-          else totalExpenses += amount;
-
-          return `
-            <tr style="border-bottom: 1px solid var(--border);">
-              <td style="padding: 12px;">${t.date}</td>
-              <td style="padding: 12px;">
-                <span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; margin-right: 4px; background: ${t.type === 'sale' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${t.type === 'sale' ? 'var(--success)' : '#ef4444'}; text-transform: uppercase;">${t.type}</span>
-                ${t.desc}
-              </td>
-              <td style="padding: 12px; text-align: right; font-weight: 600; color: ${t.type === 'sale' ? 'var(--success)' : '#ef4444'};">${t.type === 'sale' ? '' : '-'}${amount.toFixed(2)}</td>
-              <td style="padding: 12px; text-align: center;">
-                <button onclick="deleteTransaction(${index})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size: 1.25rem;">×</button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-
-      const netProfit = totalSales - totalExpenses;
-      salesEl.textContent = `K${totalSales.toFixed(2)}`;
-      expensesEl.textContent = `K${totalExpenses.toFixed(2)}`;
-      netProfitEl.textContent = `K${netProfit.toFixed(2)}`;
-      netProfitEl.style.color = netProfit >= 0 ? 'var(--success)' : '#ef4444';
     }
 
-    function addTransaction(e) {
+    function renderBusinessChart(sales, expenses) {
+      const ctx = document.getElementById('businessHealthChart').getContext('2d');
+      if (businessChart) businessChart.destroy();
+
+      businessChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Revenue', 'Expenses'],
+          datasets: [{
+            label: 'Amount (K)',
+            data: [sales, expenses],
+            backgroundColor: ['rgba(16, 185, 129, 0.6)', 'rgba(239, 68, 68, 0.6)'],
+            borderColor: ['#10b981', '#ef4444'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } } }
+        }
+      });
+    }
+
+    async function exportLendingReport() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const res = await fetch(`${API_URL}/vendors/${currentVendor.id}/accounting`);
+      const transactions = await res.json();
+
+      const totalSales = transactions.filter(t => t.type === 'sale').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+      doc.setFontSize(22);
+      doc.text("Micro-Lending Readiness Report", 20, 20);
+      doc.setFontSize(12);
+      doc.text(`Vendor: ${currentVendor.name}`, 20, 30);
+      doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 20, 37);
+
+      doc.setLineWidth(0.5);
+      doc.line(20, 42, 190, 42);
+
+      doc.setFontSize(14);
+      doc.text("Business Health Summary", 20, 52);
+      doc.setFontSize(12);
+      doc.text(`Total Revenue (Last 6 Months): K${totalSales.toFixed(2)}`, 20, 62);
+      doc.text(`Total Expenses (Last 6 Months): K${totalExpenses.toFixed(2)}`, 20, 70);
+      doc.text(`Net Profit: K${(totalSales - totalExpenses).toFixed(2)}`, 20, 78);
+
+      doc.text("Recent Transactions", 20, 95);
+      let y = 105;
+      transactions.slice(0, 10).forEach(t => {
+         doc.text(`${t.date}: ${t.description.substring(0, 30)} - K${parseFloat(t.amount).toFixed(2)} (${t.type})`, 20, y);
+         y += 8;
+      });
+
+      doc.save(\"Lending_Readiness_Report_${currentVendor.name.replace(/\s/g, '_')}.pdf\");
+      alert('Report exported successfully!');
+    }
+
+
+
+    async function addTransaction(e) {
       e.preventDefault();
-      const date = document.getElementById('accDate').value;
-      const type = document.getElementById('accType').value;
-      const amount = document.getElementById('accAmount').value;
-      const desc = document.getElementById('accDesc').value;
+      const payload = {
+        vendor_id: currentVendor.id,
+        date: document.getElementById('accDate').value,
+        type: document.getElementById('accType').value,
+        amount: document.getElementById('accAmount').value,
+        description: document.getElementById('accDesc').value,
 
-      accountingTransactions.push({ date, type, amount, desc });
-      saveAccounting();
-      updateAccountingUI();
-      e.target.reset();
-      alert('Transaction recorded successfully');
-    }
+        gst: document.getElementById('accAmount').value * 0.1, // 10% GST
+        swt: document.getElementById('accType').value === 'sale' ? document.getElementById('accAmount').value * 0.02 : 0 // 2% SWT
 
-    function deleteTransaction(index) {
-      if (confirm('Delete this transaction?')) {
-        accountingTransactions.splice(index, 1);
-        saveAccounting();
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/accounting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        await res.json();
         updateAccountingUI();
+        e.target.reset();
+        alert('Transaction recorded successfully');
+      } catch (err) {
+        alert('Failed to record transaction');
       }
     }
 
-    function saveAccounting() {
-      if (currentVendor) {
-        localStorage.setItem('um_accounting_vendor_' + currentVendor.id, JSON.stringify(accountingTransactions));
+    async function deleteTransaction(id) {
+      if (confirm('Delete this transaction?')) {
+        try {
+          await fetch(`${API_URL}/accounting/${id}`, { method: 'DELETE' });
+          updateAccountingUI();
+        } catch (err) {
+          alert('Failed to delete transaction');
+        }
       }
+    }
+
     }
 
     function init() {
@@ -765,6 +849,22 @@
         const products = await res.json();
 
         document.getElementById('statProducts').textContent = products.length;
+
+        // Inventory Alerts
+        const lowStock = products.filter(p => p.stock <= (p.stock_threshold || 5));
+        const alertBox = document.getElementById('inventoryAlerts');
+        if (lowStock.length > 0) {
+          alertBox.innerHTML = lowStock.map(p => `
+            <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid #ef4444; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>⚠️ <strong>${p.name}</strong> is low on stock (${p.stock} left)</span>
+              <button onclick="switchTab('products')" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer;">Restock</button>
+            </div>
+          `).join('');
+          alertBox.classList.remove('hidden');
+        } else {
+          alertBox.classList.add('hidden');
+        }
+
 
         const renderProduct = (p) => `
           <tr>
@@ -890,6 +990,68 @@
         alert('Failed to update status');
       }
     }
+
+
+    // Register Service Worker for Offline Sync
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered with scope:', registration.scope);
+          })
+          .catch((error) => {
+            console.error('Service Worker registration failed:', error);
+          });
+      });
+    }
+
+
+    const translations = {"en":{"shop":"Shop","sell":"Sell","wifi":"Wi-Fi","accounts":"Accounts","revenue":"Revenue","expenses":"Expenses","profit":"Estimated Profit","manage_transactions":"Manage Transactions","cart":"Your Shopping Cart","checkout":"Complete Your Order","dashboard":"Vendor Dashboard","products":"Products","orders":"Orders","settings":"Settings","accounting":"Accounting","sign_out":"Sign Out","welcome":"Welcome to Garden City SME","low_stock":"Low Stock Alert"},"tp":{"shop":"Stoa","sell":"Salim","wifi":"Wai-Fai","accounts":"Buk Kibing","revenue":"Mani i kam insait","expenses":"Mani i go ausait","profit":"Seken mani","manage_transactions":"Lukautim mani","cart":"Beg bilong yu","checkout":"Baim olgeta","dashboard":"Dasbot bilong yu","products":"Ol samting","orders":"Ol oda","settings":"Seting","accounting":"Buk Kibing","sign_out":"Givim ap","welcome":"Wanbel long Garden City SME","low_stock":"Sot long ol samting"}};
+    let currentLang = localStorage.getItem('um_lang') || 'en';
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'en' ? 'tp' : 'en';
+      localStorage.setItem('um_lang', currentLang);
+      applyTranslations();
+    }
+
+    function applyTranslations() {
+      const t = translations[currentLang];
+      document.querySelectorAll('[data-t]').forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (t[key]) el.textContent = t[key];
+      });
+      const toggleBtn = document.getElementById('langToggle');
+      if (toggleBtn) toggleBtn.textContent = currentLang === 'en' ? '🇵🇳 Tok Pisin' : '🇬🇧 English';
+    }
+
+    applyTranslations();
+
+    document.getElementById('botForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('botInput');
+      const text = input.value;
+      if (!text) return;
+
+      const chat = document.getElementById('botChat');
+      chat.innerHTML += `<div style="background: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 12px 12px 0 12px; margin-bottom: 8px; margin-left: auto; width: fit-content; max-width: 80%;">${text}</div>`;
+      input.value = '';
+      chat.scrollTop = chat.scrollHeight;
+
+      try {
+        const res = await fetch(`${API_URL}/bot/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vendor_id: currentVendor.id, text })
+        });
+        const data = await res.json();
+        chat.innerHTML += `<div style="background: var(--primary); color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">${data.response}</div>`;
+        chat.scrollTop = chat.scrollHeight;
+        if (text.toLowerCase().includes('log sale')) updateAccountingUI();
+      } catch (err) {
+        chat.innerHTML += `<div style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">Error communicating with bot.</div>`;
+      }
+    };
 
     init();
   </script>

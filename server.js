@@ -145,6 +145,44 @@ function initDatabase() {
       }
     });
 
+
+    // Accounting Transactions table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS accounting_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        description TEXT,
+        gst REAL DEFAULT 0,
+        swt REAL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Payments table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER NOT NULL,
+        order_id INTEGER,
+        amount REAL NOT NULL,
+        method TEXT,
+        status TEXT DEFAULT 'pending',
+        transaction_ref TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+      )
+    `);
+
+    // Add stock_threshold to products if not exists
+    db.run("ALTER TABLE products ADD COLUMN stock_threshold INTEGER DEFAULT 5", (err) => {
+        // Ignore error if column already exists
+    });
+
     console.log('Database tables initialized');
   });
 }
@@ -402,11 +440,49 @@ app.get('/api/vendors/:vendorId/orders', (req, res) => {
 });
 
 // Update order status
+
+// Update order status and trigger inventory/accounting automation
 app.put('/api/orders/:id/status', (req, res) => {
   const { status } = req.body;
-  db.run('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Order status updated successfully' });
+  const orderId = req.params.id;
+
+  db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
+    if (err || !order) return res.status(500).json({ error: 'Order not found' });
+
+    db.run('UPDATE orders SET status = ? WHERE id = ?', [status, orderId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+
+      if (status === 'completed') {
+        const items = JSON.parse(order.items);
+        items.forEach(item => {
+          // Decrement stock
+          db.run('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?', [item.quantity, item.id]);
+
+          // Check stock threshold
+          db.get('SELECT name, stock, stock_threshold FROM products WHERE id = ?', [item.id], (err, prod) => {
+            if (prod && prod.stock <= prod.stock_threshold) {
+              console.log(`ALERT: Stock for ${prod.name} is low (${prod.stock} left)`);
+              // In real app, send email/SMS. Here we just log.
+            }
+          });
+        });
+
+        // Automatically create accounting entry if not already done via payment sync
+        const date = new Date().toISOString().split('T')[0];
+        const desc = `Completed Order #${orderId} for ${order.customer_name}`;
+        const gst = order.total_price * 0.1; // 10% GST
+        const swt = order.total_price * 0.02; // 2% SWT Simulation
+
+        // Check if already reconciled to avoid duplicate
+        db.get('SELECT id FROM accounting_transactions WHERE description LIKE ?', [`%Order #${orderId}%`], (err, trans) => {
+           if (!trans) {
+             db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+               [order.vendor_id, date, 'sale', order.total_price, desc, gst, swt]);
+           }
+        });
+      }
+      res.json({ message: 'Order status updated successfully' });
+    });
   });
 });
 
@@ -507,6 +583,97 @@ app.get('/api/stats', (req, res) => {
       });
     });
   });
+});
+
+
+// ============== ACCOUNTING ROUTES ==============
+
+// Get accounting transactions for a vendor
+app.get('/api/vendors/:vendorId/accounting', (req, res) => {
+  db.all('SELECT * FROM accounting_transactions WHERE vendor_id = ? ORDER BY date DESC', [req.params.vendorId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Create accounting transaction
+app.post('/api/accounting', (req, res) => {
+  const { vendor_id, date, type, amount, description, gst, swt } = req.body;
+  const sql = 'INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [vendor_id, date, type, amount, description, gst || 0, swt || 0], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID, message: 'Transaction recorded successfully' });
+  });
+});
+
+// Delete accounting transaction
+app.delete('/api/accounting/:id', (req, res) => {
+  db.run('DELETE FROM accounting_transactions WHERE id = ?', [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Transaction deleted successfully' });
+  });
+});
+
+// ============== PAYMENTS ROUTES ==============
+
+// Initiate payment (Simulation)
+app.post('/api/payments/initiate', (req, res) => {
+  const { vendor_id, order_id, amount, method } = req.body;
+  const transaction_ref = 'TXN-' + Date.now();
+  const sql = 'INSERT INTO payments (vendor_id, order_id, amount, method, status, transaction_ref) VALUES (?, ?, ?, ?, ?, ?)';
+  db.run(sql, [vendor_id, order_id, amount, method, 'pending', transaction_ref], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Simulate successful mobile money response
+    res.json({
+      id: this.lastID,
+      status: 'pending',
+      message: 'Payment initiated. Please confirm on your mobile device.',
+      transaction_ref
+    });
+
+    // Auto-complete after 2 seconds for simulation
+    setTimeout(() => {
+      db.run('UPDATE payments SET status = "completed" WHERE id = ?', [this.lastID]);
+
+      // Auto-reconcile to accounting
+      const date = new Date().toISOString().split('T')[0];
+      const desc = `Payment for Order #${order_id} (Ref: ${transaction_ref})`;
+      const gst = amount * 0.1; // 10% GST
+      db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst) VALUES (?, ?, ?, ?, ?, ?)',
+        [vendor_id, date, 'sale', amount, desc, gst]);
+    }, 2000);
+  });
+});
+
+// ============== BOT ROUTES ==============
+
+app.post('/api/bot/command', (req, res) => {
+  const { vendor_id, text } = req.body;
+  if (!text) return res.status(400).json({ response: 'Please provide some text.' });
+  const cmd = text.toLowerCase();
+
+  if (cmd.startsWith('log sale')) {
+    const amountStr = cmd.replace('log sale', '').trim();
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount)) return res.status(400).json({ response: 'Sorry, I could not understand that amount. Use: log sale [amount]' });
+
+    const date = new Date().toISOString().split('T')[0];
+    db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst) VALUES (?, ?, ?, ?, ?, ?)',
+      [vendor_id, date, 'sale', amount, 'Bot Entry', amount * 0.1], function(err) {
+        if (err) return res.json({ response: 'Error logging sale: ' + err.message });
+        res.json({ response: `Logged sale of K${amount.toFixed(2)} successfully!` });
+      });
+  } else if (cmd.includes('balance')) {
+    db.all('SELECT type, amount FROM accounting_transactions WHERE vendor_id = ?', [vendor_id], (err, rows) => {
+      if (err) return res.json({ response: 'Error fetching balance.' });
+      const sales = rows.filter(r => r.type === 'sale').reduce((s, r) => s + r.amount, 0);
+      const expenses = rows.filter(r => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
+      res.json({ response: `Your total sales: K${sales.toFixed(2)}\nTotal expenses: K${expenses.toFixed(2)}\nCurrent Profit: K${(sales - expenses).toFixed(2)}` });
+    });
+  } else {
+    res.json({ response: 'Hello! I am your Garden City SME Assistant. You can say "log sale 50" or "show balance".' });
+  }
 });
 
 // Start server
