@@ -695,6 +695,11 @@
       </div>
       <div class="modal-body">
         <form id="checkoutForm">
+          <div id="loyaltyDisplay" class="hidden" style="background: rgba(212, 175, 55, 0.1); border: 1px solid var(--text-accent); padding: 12px; border-radius: 8px; margin-bottom: 1.5rem;">
+             <span style="color: var(--text-accent); font-weight: bold; font-size: 0.9rem;">🤝 Loyalty Rewards</span>
+             <p id="loyaltyMsg" style="font-size: 0.8rem; margin: 4px 0 0 0; color: var(--text-light);"></p>
+          </div>
+
           <div class="form-group">
             <label class="form-label">Your Name</label>
             <input type="text" id="custName" class="form-input" placeholder="Enter your full name" required>
@@ -1062,13 +1067,44 @@
       }
     };
 
-    function openCheckoutModal() {
+
+    async function updateLoyaltyDisplay() {
+      const user = JSON.parse(localStorage.getItem('um_user'));
+      const display = document.getElementById('loyaltyDisplay');
+      const msg = document.getElementById('loyaltyMsg');
+
+      if (!user || cart.length === 0) {
+        if(display) display.classList.add('hidden');
+        return;
+      }
+
+      // Check for the first vendor in cart for points
+      const vendorId = cart[0].vendor_id;
+      try {
+        const res = await fetch();
+        const data = await res.json();
+
+        if(display) display.classList.remove('hidden');
+        if(msg) {
+          if (data.current_points > 0) {
+            msg.innerHTML = ;
+          } else {
+            msg.innerHTML = ;
+          }
+        }
+      } catch (err) {
+        if(display) display.classList.add('hidden');
+      }
+    }
+
+    window.openCheckoutModal = function() {
       if (cart.length === 0) return;
       const user = JSON.parse(localStorage.getItem('um_user'));
       if (user) {
         document.getElementById('custName').value = user.name || '';
         document.getElementById('custPhone').value = user.phone || '';
       }
+      updateLoyaltyDisplay();
       document.getElementById('checkoutModal').classList.add('show');
     }
 
