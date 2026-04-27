@@ -39,6 +39,7 @@ function initDatabase() {
       CREATE TABLE IF NOT EXISTS vendors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        loyalty_rate REAL DEFAULT 1.0,
         category TEXT NOT NULL,
         phone TEXT NOT NULL,
         location TEXT NOT NULL,
@@ -146,6 +147,36 @@ function initDatabase() {
     });
 
 
+
+    // Customer CRM Table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS customer_crm (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER NOT NULL,
+        phone_number TEXT NOT NULL,
+        full_name TEXT,
+        total_spent REAL DEFAULT 0,
+        last_visit DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(vendor_id, phone_number),
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Loyalty Points Table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loyalty_points (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        vendor_id INTEGER NOT NULL,
+        current_points INTEGER DEFAULT 0,
+        total_earned_points INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customer_crm(id) ON DELETE CASCADE,
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+      )
+    `);
+
     // Accounting Transactions table
     db.run(`
       CREATE TABLE IF NOT EXISTS accounting_transactions (
@@ -204,8 +235,8 @@ const upload = multer({ storage: storage });
 // Vendor Registration
 app.post('/api/auth/register', (req, res) => {
   const { name, category, phone, location, description, facebook, password, email } = req.body;
-  const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [name, category, phone, location, description, facebook, password, email], function(err) {
+  const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [name, category, phone, location, description, facebook, password, email, req.body.loyalty_rate || 1.0], function(err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -481,6 +512,36 @@ app.put('/api/orders/:id/status', (req, res) => {
            }
         });
       }
+
+             // Loyalty Points Logic
+             db.get('SELECT loyalty_rate FROM vendors WHERE id = ?', [order.vendor_id], (err, vendor) => {
+               const rate = vendor ? vendor.loyalty_rate : 1.0;
+               const pointsEarned = Math.floor(order.total_price * rate);
+
+               db.get('SELECT id FROM customer_crm WHERE vendor_id = ? AND phone_number = ?', [order.vendor_id, order.customer_phone], (err, customer) => {
+                 if (!customer) {
+                   db.run('INSERT INTO customer_crm (vendor_id, phone_number, full_name, total_spent) VALUES (?, ?, ?, ?)',
+                     [order.vendor_id, order.customer_phone, order.customer_name, order.total_price], function(err) {
+                       const customerId = this.lastID;
+                       db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
+                         [customerId, order.vendor_id, pointsEarned, pointsEarned]);
+                     });
+                 } else {
+                   db.run('UPDATE customer_crm SET total_spent = total_spent + ?, last_visit = CURRENT_TIMESTAMP WHERE id = ?',
+                     [order.total_price, customer.id]);
+                   db.get('SELECT id FROM loyalty_points WHERE customer_id = ? AND vendor_id = ?', [customer.id, order.vendor_id], (err, loyalty) => {
+                     if (!loyalty) {
+                       db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
+                         [customer.id, order.vendor_id, pointsEarned, pointsEarned]);
+                     } else {
+                       db.run('UPDATE loyalty_points SET current_points = current_points + ?, total_earned_points = total_earned_points + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                         [pointsEarned, pointsEarned, loyalty.id]);
+                     }
+                   });
+                 }
+               });
+             });
+
       res.json({ message: 'Order status updated successfully' });
     });
   });
@@ -674,6 +735,46 @@ app.post('/api/bot/command', (req, res) => {
   } else {
     res.json({ response: 'Hello! I am your Garden City SME Assistant. You can say "log sale 50" or "show balance".' });
   }
+});
+
+
+// ============== LOYALTY & CRM ROUTES ==============
+
+// Get CRM customers for a vendor
+app.get('/api/vendors/:vendorId/crm', (req, res) => {
+  const sql = `
+    SELECT c.*, l.current_points, l.total_earned_points
+    FROM customer_crm c
+    LEFT JOIN loyalty_points l ON c.id = l.customer_id AND c.vendor_id = l.vendor_id
+    WHERE c.vendor_id = ?
+    ORDER BY c.last_visit DESC
+  `;
+  db.all(sql, [req.params.vendorId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Get loyalty points for a customer phone number at a specific vendor
+app.get('/api/vendors/:vendorId/loyalty/:phone', (req, res) => {
+  const sql = `
+    SELECT l.current_points, l.total_earned_points, c.full_name
+    FROM loyalty_points l
+    JOIN customer_crm c ON l.customer_id = c.id
+    WHERE l.vendor_id = ? AND c.phone_number = ?
+  `;
+  db.get(sql, [req.params.vendorId, req.params.phone], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(row || { current_points: 0, total_earned_points: 0 });
+  });
+});
+
+// Mock endpoint for sending promotions
+app.post('/api/vendors/:vendorId/promotions', (req, res) => {
+  const { customerIds, message, channel } = req.body;
+  // In a real app, this would integrate with Twilio or WhatsApp Business API
+  console.log(`Sending ${channel} promotion to ${customerIds.length} customers from vendor ${req.params.vendorId}: ${message}`);
+  res.json({ message: `Promotion sent successfully to ${customerIds.length} customers via ${channel}!` });
 });
 
 // Start server
