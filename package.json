@@ -16,6 +16,7 @@
   "author": "Deeps Systems",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
