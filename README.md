@@ -156,6 +156,48 @@ Created by **Deeps Systems**
 - Phone/Whatsapp: (675) 8300 99881
 - Text: (675) 8300 9881
 
+## 💳 Mobile-Money Payments & WhatsApp Marketing Integration
+
+This platform supports live payment gateway processing and automated WhatsApp notifications.
+
+### ⚙️ Extended Environment Variables
+Ensure the following keys are added to your local, untracked `.env` file (never commit actual secrets):
+
+```env
+# Mobile-Money Payments Configuration
+PAYMENT_PROVIDER=mock                     # Supported: bsp | micash | cellmoni | mock
+PAYMENT_API_BASE_URL=https://api.bsp.com # Target routing base URL for payment provider
+PAYMENT_API_KEY=merchant-api-key         # Merchant/API credentials
+PAYMENT_API_SECRET=merchant-api-secret   # Merchant/API credentials secret
+PAYMENT_WEBHOOK_SECRET=webhook-secret    # Cryptographic signature confirmation key
+
+# Live WhatsApp Messaging Configuration
+WHATSAPP_PROVIDER=mock                    # Supported: meta | twilio | mock
+WHATSAPP_API_TOKEN=your-meta-api-token    # Standard Meta WhatsApp Cloud API credentials
+WHATSAPP_PHONE_NUMBER_ID=your-phone-id    # Standard Meta WhatsApp Cloud API phone ID
+
+# Twilio WhatsApp Configuration (Fallback if WHATSAPP_PROVIDER=twilio)
+TWILIO_ACCOUNT_SID=twilio-acc-sid         # Twilio account SID
+TWILIO_AUTH_TOKEN=twilio-auth-token       # Twilio authentication token
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886 # Twilio WhatsApp sender number
+```
+
+### ⚓ Inbound Merchant Webhook Target URL
+The exact path for payments provider callback/webhook processing is:
+`POST http://<your-domain>/api/payments/webhook`
+
+- **Webhook Security:** Webhook payloads are strictly verified utilizing standard hash-based cryptographic signature comparisons (`X-Signature` or `X-BSP-Signature` headers) with timing-safe operations via `crypto.timingSafeEqual()`.
+- **Idempotency:** Webhook requests guarantee idempotency, ensuring that transitions for completed or failed operations prevent duplicate accounting reconciliation runs.
+
+### 💬 WhatsApp Campaigns & Setup Criteria
+1. **Meta WhatsApp Cloud API Setup:**
+   - Register a developer account on Meta for Developers portal.
+   - Set up WhatsApp Business Platform and obtain the Permanent access token (`WHATSAPP_API_TOKEN`) and Phone Number ID (`WHATSAPP_PHONE_NUMBER_ID`).
+   - Register templates to utilize live marketing broadcasts.
+2. **Twilio WhatsApp Setup:**
+   - Sign up on Twilio and configure WhatsApp Sandbox or Production sender.
+   - Use standard Account SID and Auth Token, and configure your sender number (`TWILIO_WHATSAPP_FROM`).
+
 ## 📄 License
 
 MIT License - Free to use and modify

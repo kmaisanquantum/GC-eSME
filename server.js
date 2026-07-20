@@ -13,6 +13,8 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-change-in-production';
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const providerAdapter = require('./payments/providerAdapter');
+const whatsappAdapter = require('./messaging/whatsappAdapter');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -250,9 +252,33 @@ function initDatabase() {
         method TEXT,
         status TEXT DEFAULT 'pending',
         transaction_ref TEXT,
+        provider TEXT,
+        provider_txn_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
         FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+      )
+    `);
+
+    // Migrations for payments table columns if missing
+    db.run("ALTER TABLE payments ADD COLUMN provider TEXT", (err) => {
+      // Ignore if column already exists
+    });
+    db.run("ALTER TABLE payments ADD COLUMN provider_txn_id TEXT", (err) => {
+      // Ignore if column already exists
+    });
+
+    // Promotion logs table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS promotion_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER NOT NULL,
+        customer_id INTEGER NOT NULL,
+        message TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        status TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
       )
     `);
 
@@ -929,33 +955,143 @@ app.delete('/api/accounting/:id', authMiddleware, (req, res) => {
 
 // ============== PAYMENTS ROUTES ==============
 
-// Initiate payment (Simulation)
-app.post('/api/payments/initiate', (req, res) => {
-  const { vendor_id, order_id, amount, method } = req.body;
+// Initiate payment (Protected & tenant-scoped)
+app.post('/api/payments/initiate', authMiddleware, (req, res) => {
+  const { vendor_id, order_id, amount, method, phone: bodyPhone, customer_phone } = req.body;
+
+  if (!vendor_id || !order_id || !amount || !method) {
+    return res.status(400).json({ error: 'Missing required parameters: vendor_id, order_id, amount, method' });
+  }
+
+  // If vendor, they can only initiate for themselves
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(vendor_id))) {
+    return res.status(403).json({ error: 'Forbidden: You cannot initiate payments for another vendor' });
+  }
+
   const transaction_ref = 'TXN-' + Date.now();
-  const sql = 'INSERT INTO payments (vendor_id, order_id, amount, method, status, transaction_ref) VALUES (?, ?, ?, ?, ?, ?)';
-  db.run(sql, [vendor_id, order_id, amount, method, 'pending', transaction_ref], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
 
-    // Simulate successful mobile money response
-    res.json({
-      id: this.lastID,
-      status: 'pending',
-      message: 'Payment initiated. Please confirm on your mobile device.',
-      transaction_ref
+  db.get('SELECT customer_phone FROM orders WHERE id = ?', [order_id], async (err, orderRow) => {
+    const phone = bodyPhone || customer_phone || (orderRow ? orderRow.customer_phone : '70000000');
+
+    // Insert records onto local tracking table initializing status explicitly as 'pending'
+    const sql = 'INSERT INTO payments (vendor_id, order_id, amount, method, status, transaction_ref, provider, provider_txn_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    const provider = process.env.PAYMENT_PROVIDER || 'mock';
+
+    db.run(sql, [vendor_id, order_id, amount, method, 'pending', transaction_ref, provider, null], async function(insertErr) {
+      if (insertErr) return res.status(500).json({ error: insertErr.message });
+      const recordId = this.lastID;
+
+      try {
+        // Fire the outbound payload via providerAdapter.initiateCharge()
+        const chargeResult = await providerAdapter.initiateCharge({
+          amount: parseFloat(amount),
+          phone,
+          reference: transaction_ref,
+          orderId: order_id
+        });
+
+        // Append the returned transaction identity trace safely onto the row record
+        const updateSql = 'UPDATE payments SET provider_txn_id = ? WHERE id = ?';
+        db.run(updateSql, [chargeResult.provider_txn_id, recordId], (updateErr) => {
+          if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+          // Return the transaction tracking profile
+          res.json({
+            id: recordId,
+            status: 'pending',
+            message: chargeResult.message || 'Payment initiated successfully.',
+            transaction_ref: transaction_ref,
+            provider_txn_id: chargeResult.provider_txn_id,
+            provider
+          });
+        });
+      } catch (chargeErr) {
+        // Mask raw integration stack traces inside try/catch matrices
+        console.error('[CHARGE ERROR]', chargeErr);
+        res.status(500).json({ error: 'Failed to initiate charge with the payment provider. Please try again later.' });
+      }
     });
+  });
+});
 
-    // Auto-complete after 2 seconds for simulation
-    setTimeout(() => {
-      db.run('UPDATE payments SET status = "completed" WHERE id = ?', [this.lastID]);
+// Asynchronous Reconciling Webhook Hook Engine
+app.post('/api/payments/webhook', (req, res) => {
+  if (!providerAdapter.verifyWebhookSignature(req)) {
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
 
-      // Auto-reconcile to accounting
-      const date = new Date().toISOString().split('T')[0];
-      const desc = `Payment for Order #${order_id} (Ref: ${transaction_ref})`;
-      const gst = amount * 0.1; // 10% GST
-      db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst) VALUES (?, ?, ?, ?, ?, ?)',
-        [vendor_id, date, 'sale', amount, desc, gst]);
-    }, 2000);
+  const { transaction_ref, status, provider_txn_id } = req.body;
+
+  if (!transaction_ref) {
+    return res.status(400).json({ error: 'Missing transaction_ref in webhook body' });
+  }
+
+  // Look up matching payment log entry
+  db.get('SELECT * FROM payments WHERE transaction_ref = ?', [transaction_ref], (err, payment) => {
+    if (err) return res.status(500).json({ error: 'Internal database query error.' });
+    if (!payment) return res.status(404).json({ error: 'Payment record not found' });
+
+    // Idempotency check: guarantee already completed or failed transitions drop out immediately
+    if (payment.status === 'completed' || payment.status === 'failed') {
+      return res.json({ message: 'Webhook already processed (idempotent)', payment_id: payment.id });
+    }
+
+    const isSuccess = status === 'completed' || status === 'success' || status === 'SUCCESS';
+    const newStatus = isSuccess ? 'completed' : 'failed';
+
+    if (newStatus === 'completed') {
+      // Update payment status and provider transaction ID
+      db.run('UPDATE payments SET status = "completed", provider_txn_id = ? WHERE id = ?', [provider_txn_id || payment.provider_txn_id, payment.id], function(updateErr) {
+        if (updateErr) return res.status(500).json({ error: 'Failed to update payment status.' });
+
+        // Auto-reconcile to accounting - create exactly one transaction row inside accounting_transactions ledger
+        const date = new Date().toISOString().split('T')[0];
+        const desc = `Payment for Order #${payment.order_id} (Ref: ${transaction_ref})`;
+        const amount = payment.amount;
+        const gst = amount * 0.1; // 10% GST
+        const swt = amount * 0.02; // 2% SWT Simulation where applicable
+
+        db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [payment.vendor_id, date, 'sale', amount, desc, gst, swt], function(ledgerErr) {
+            if (ledgerErr) {
+              console.error('[LEDGER RECONCILIATION ERROR] Webhook failed to write ledger row:', ledgerErr.message);
+              return res.status(500).json({ error: 'Database transaction ledger write failed.' });
+            }
+            res.json({ message: 'Payment successfully completed and ledger reconciled', payment_id: payment.id });
+          });
+      });
+    } else {
+      db.run('UPDATE payments SET status = "failed", provider_txn_id = ? WHERE id = ?', [provider_txn_id || payment.provider_txn_id, payment.id], function(updateErr) {
+        if (updateErr) return res.status(500).json({ error: 'Failed to update payment status to failed.' });
+        res.json({ message: 'Payment failed and marked', payment_id: payment.id });
+      });
+    }
+  });
+});
+
+// Tenant-Scoped Payment Status Enforcer Endpoint
+app.get('/api/payments/:id/status', authMiddleware, (req, res) => {
+  const paymentId = req.params.id;
+  db.get('SELECT * FROM payments WHERE id = ?', [paymentId], (err, payment) => {
+    if (err) return res.status(500).json({ error: 'Internal database query error.' });
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    // Validate that a vendor can access only their own related transaction statuses
+    if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== payment.vendor_id)) {
+      return res.status(403).json({ error: 'Forbidden: You cannot access status for this payment' });
+    }
+
+    res.json({
+      id: payment.id,
+      vendor_id: payment.vendor_id,
+      order_id: payment.order_id,
+      amount: payment.amount,
+      status: payment.status,
+      transaction_ref: payment.transaction_ref,
+      provider: payment.provider,
+      provider_txn_id: payment.provider_txn_id,
+      created_at: payment.created_at
+    });
   });
 });
 
@@ -1025,16 +1161,86 @@ app.get('/api/vendors/:vendorId/loyalty/:phone', (req, res) => {
   });
 });
 
-// Mock endpoint for sending promotions (Protected & tenant-scoped)
+// Real targeted promotions API endpoint with WhatsApp dispatcher and audit logging (Protected & tenant-scoped)
 app.post('/api/vendors/:vendorId/promotions', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(req.params.vendorId))) {
     return res.status(403).json({ error: 'Forbidden: You can only send promotions for your own store' });
   }
+
   const vendorId = req.user.role === 'admin' ? parseInt(req.params.vendorId) : req.user.id;
   const { customerIds, message, channel } = req.body;
-  // In a real app, this would integrate with Twilio or WhatsApp Business API
-  console.log(`Sending ${channel} promotion to ${customerIds.length} customers from vendor ${vendorId}: ${message}`);
-  res.json({ message: `Promotion sent successfully to ${customerIds.length} customers via ${channel}!` });
+
+  if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
+    return res.status(400).json({ error: 'Missing or invalid customerIds array' });
+  }
+  if (!message) {
+    return res.status(400).json({ error: 'Missing message content' });
+  }
+
+  // Pull target customer mobile details dynamically relative to parsed customerIds and vendor scope
+  const placeholders = customerIds.map(() => '?').join(',');
+  const sql = `SELECT id, phone_number, full_name FROM customer_crm WHERE vendor_id = ? AND id IN (${placeholders})`;
+
+  db.all(sql, [vendorId, ...customerIds], async (err, customers) => {
+    if (err) return res.status(500).json({ error: 'Internal database query error.' });
+    if (!customers || customers.length === 0) {
+      return res.status(400).json({ error: 'No matching customers found inside this vendor\'s CRM scope.' });
+    }
+
+    let successCount = 0;
+    let failureCount = 0;
+    const results = [];
+
+    // Iterate and dispatch notification templates asynchronously per recipient
+    for (const customer of customers) {
+      let deliveryStatus = 'failed';
+      try {
+        const dispatchResult = await whatsappAdapter.sendMessage({
+          to: customer.phone_number,
+          body: message
+        });
+
+        if (dispatchResult.status === 'sent') {
+          deliveryStatus = 'sent';
+          successCount++;
+        } else {
+          failureCount++;
+        }
+      } catch (sendErr) {
+        // Individual exceptions handled gracefully per recipient so single failure does not halt the batch
+        console.error(`[CAMPAIGN ERROR] Failed to send promotion to ${customer.phone_number}:`, sendErr.message);
+        failureCount++;
+      }
+
+      // Log details into promotion_logs table for deliverability auditing
+      db.run(
+        'INSERT INTO promotion_logs (vendor_id, customer_id, message, channel, status) VALUES (?, ?, ?, ?, ?)',
+        [vendorId, customer.id, message, channel || 'WhatsApp', deliveryStatus],
+        (logErr) => {
+          if (logErr) {
+            console.error('[CAMPAIGN AUDIT ERROR] Failed to write audit promotion log:', logErr.message);
+          }
+        }
+      );
+
+      results.push({
+        customer_id: customer.id,
+        phone: customer.phone_number,
+        status: deliveryStatus
+      });
+    }
+
+    // Return aggregated telemetry summary mapping counts back to client
+    res.json({
+      message: `Campaign execution complete. Sent: ${successCount}, Failed: ${failureCount}.`,
+      telemetry: {
+        total_targets: customers.length,
+        successful_dispatches: successCount,
+        failed_dispatches: failureCount
+      },
+      details: results
+    });
+  });
 });
 
 // Start server
