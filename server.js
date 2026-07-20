@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -5,12 +6,44 @@ const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-change-in-production';
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
+// Rate limiting configuration for API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// Dynamic restricted CORS origin configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
+// Global Middleware Stack
+app.use(helmet({
+  contentSecurityPolicy: false // Disable CSP if frontend and backend are served together and need to load external cdn assets easily
+}));
+app.use(cors(corsOptions));
+app.use('/api/', apiLimiter);
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
@@ -22,11 +55,12 @@ if (!fs.existsSync('uploads')) {
 }
 
 // Database setup
-const db = new sqlite3.Database('./garden_city_sme.db', (err) => {
+const dbPath = process.env.DATABASE_FILE || './garden_city_sme.db';
+const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database:', err);
   } else {
-    console.log('Connected to Garden City SME SQLite database');
+    console.log('Connected to Garden City SME SQLite database at ' + dbPath);
     initDatabase();
   }
 });
@@ -139,10 +173,23 @@ function initDatabase() {
       )
     `);
 
-    // Create default admin if not exists
-    db.get('SELECT * FROM admins WHERE username = ?', ['admin'], (err, row) => {
+    // Create default admin if not exists with hashed password and env overrides
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    db.get('SELECT * FROM admins WHERE username = ?', [adminUsername], async (err, row) => {
       if (!row) {
-        db.run('INSERT INTO admins (username, password) VALUES (?, ?)', ['admin', 'admin123']);
+        try {
+          const hashedPassword = await bcrypt.hash(adminPassword, 10);
+          db.run('INSERT INTO admins (username, password) VALUES (?, ?)', [adminUsername, hashedPassword], (insertErr) => {
+            if (insertErr) {
+              console.error('Error inserting admin user during database init:', insertErr);
+            } else {
+              console.log(`Default admin user '${adminUsername}' created successfully.`);
+            }
+          });
+        } catch (hashErr) {
+          console.error('Error hashing default admin password:', hashErr);
+        }
       }
     });
 
@@ -230,37 +277,93 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+// JWT Authentication Middleware
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return res.status(401).json({ error: 'Token format must be Bearer <token>' });
+  }
+  const token = parts[1];
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = decoded;
+    next();
+  });
+}
+
 // ============== AUTH ROUTES ==============
 
 // Vendor Registration
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { name, category, phone, location, description, facebook, password, email } = req.body;
-  const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [name, category, phone, location, description, facebook, password, email, req.body.loyalty_rate || 1.0], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ id: this.lastID, message: 'Vendor registered successfully' });
-  });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    db.run(sql, [name, category, phone, location, description, facebook, hashedPassword, email, req.body.loyalty_rate || 1.0], function(err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      const token = jwt.sign({ id: this.lastID, role: 'vendor', email }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ id: this.lastID, message: 'Vendor registered successfully', token });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Vendor Login
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
-  db.get('SELECT * FROM vendors WHERE email = ? AND password = ?', [email, password], (err, row) => {
+  db.get('SELECT * FROM vendors WHERE email = ?', [email], async (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(401).json({ error: 'Invalid email or password' });
-    res.json({ message: 'Login successful', vendor: row });
+    try {
+      const isMatch = await bcrypt.compare(password, row.password);
+      if (!isMatch) return res.status(401).json({ error: 'Invalid email or password' });
+      const token = jwt.sign({ id: row.id, role: 'vendor', email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ message: 'Login successful', vendor: row, token });
+    } catch (compareErr) {
+      res.status(500).json({ error: compareErr.message });
+    }
   });
 });
 
-// Social Authentication
-// NOTE: For real production, verify tokens on server side using 'google-auth-library' or 'fb' Node.js SDK
-app.post("/api/auth/social", (req, res) => {
-  const { provider, name, email, id, token, role } = req.body;
+// Social Authentication (Hardened social token verification)
+app.post("/api/auth/social", async (req, res) => {
+  const { provider, token, role } = req.body;
 
-  if (!id || !provider) {
+  if (!provider) {
     return res.status(400).json({ error: "Missing required social auth parameters" });
+  }
+
+  let id, email, name;
+
+  if (provider === 'google') {
+    if (!token) {
+      return res.status(400).json({ error: "Missing required Google token" });
+    }
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+      const payload = ticket.getPayload();
+      id = payload['sub'];
+      email = payload['email'];
+      name = payload['name'];
+    } catch (err) {
+      return res.status(401).json({ error: "Invalid Google token" });
+    }
+  } else if (provider === 'facebook') {
+    return res.status(400).json({ error: "Facebook authentication is not supported. Please use Google authentication." });
+  } else {
+    return res.status(400).json({ error: "Unsupported social provider" });
   }
 
   const table = role === 'vendor' ? 'vendors' : 'users';
@@ -270,7 +373,8 @@ app.post("/api/auth/social", (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
 
     if (row) {
-      return res.json({ message: "Login successful", [role === 'vendor' ? 'vendor' : 'user']: row });
+      const jwtToken = jwt.sign({ id: row.id, role: role, email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      return res.json({ message: "Login successful", [role === 'vendor' ? 'vendor' : 'user']: row, token: jwtToken });
     } else {
       // Check if a user/vendor already exists with this email
       db.get(`SELECT * FROM ${table} WHERE email = ?`, [email], (err, existingRow) => {
@@ -283,7 +387,8 @@ app.post("/api/auth/social", (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             existingRow.social_provider = provider;
             existingRow.social_id = id;
-            res.json({ message: "Social account linked", [role === 'vendor' ? 'vendor' : 'user']: existingRow });
+            const jwtToken = jwt.sign({ id: existingRow.id, role: role, email: existingRow.email }, JWT_SECRET, { expiresIn: '24h' });
+            res.json({ message: "Social account linked", [role === 'vendor' ? 'vendor' : 'user']: existingRow, token: jwtToken });
           });
         } else {
           // Create new record
@@ -291,13 +396,17 @@ app.post("/api/auth/social", (req, res) => {
              const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone) VALUES (?, ?, ?, ?, ?, ?, ?)";
              db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', ''], function(err) {
                if (err) return res.status(500).json({ error: err.message });
-               res.json({ message: "Social vendor account created", vendor: { id: this.lastID, name, email, social_provider: provider, social_id: id } });
+               const vendor = { id: this.lastID, name, email, social_provider: provider, social_id: id };
+               const jwtToken = jwt.sign({ id: this.lastID, role: role, email }, JWT_SECRET, { expiresIn: '24h' });
+               res.json({ message: "Social vendor account created", vendor, token: jwtToken });
              });
           } else {
              const sql = "INSERT INTO users (name, email, social_provider, social_id) VALUES (?, ?, ?, ?)";
              db.run(sql, [name, email, provider, id], function(err) {
                if (err) return res.status(500).json({ error: err.message });
-               res.json({ message: "Social customer account created", user: { id: this.lastID, name, email, social_provider: provider, social_id: id } });
+               const user = { id: this.lastID, name, email, social_provider: provider, social_id: id };
+               const jwtToken = jwt.sign({ id: this.lastID, role: role, email }, JWT_SECRET, { expiresIn: '24h' });
+               res.json({ message: "Social customer account created", user, token: jwtToken });
              });
           }
         }
@@ -306,22 +415,35 @@ app.post("/api/auth/social", (req, res) => {
   });
 });
 
-app.post("/api/auth/customer/register", (req, res) => {
+app.post("/api/auth/customer/register", async (req, res) => {
   const { name, email, phone, password } = req.body;
-  const sql = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
-  db.run(sql, [name, email, phone, password], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, message: "Customer registered successfully" });
-  });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const sql = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
+    db.run(sql, [name, email, phone, hashedPassword], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      const token = jwt.sign({ id: this.lastID, role: 'customer', email }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ id: this.lastID, message: "Customer registered successfully", token });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Customer Login
 app.post("/api/auth/customer/login", (req, res) => {
   const { email, password } = req.body;
-  db.get("SELECT * FROM users WHERE email = ? AND password = ?", [email, password], (err, row) => {
+  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(401).json({ error: "Invalid email or password" });
-    res.json({ message: "Login successful", user: row });
+    try {
+      const isMatch = await bcrypt.compare(password, row.password);
+      if (!isMatch) return res.status(401).json({ error: "Invalid email or password" });
+      const token = jwt.sign({ id: row.id, role: 'customer', email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ message: "Login successful", user: row, token });
+    } catch (compareErr) {
+      res.status(500).json({ error: compareErr.message });
+    }
   });
 });
 
@@ -335,28 +457,49 @@ app.get('/api/vendors', (req, res) => {
   });
 });
 
-// Get vendor by ID
+// Get vendor by ID with data minimization (safe columns only)
 app.get('/api/vendors/:id', (req, res) => {
-  db.get('SELECT * FROM vendors WHERE id = ?', [req.params.id], (err, row) => {
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ?', [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Vendor not found' });
     res.json(row);
   });
 });
 
-// Update vendor
-app.put('/api/vendors/:id', (req, res) => {
+// Get vendor me by ID (Protected & ownership verified)
+app.get('/api/vendors/me/:id', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only read your own vendor profile' });
+  }
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ?', [targetId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Vendor not found' });
+    res.json(row);
+  });
+});
+
+// Update vendor (Protected & ownership verified)
+app.put('/api/vendors/:id', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only modify your own vendor profile' });
+  }
   const { name, category, phone, location, description, facebook, email } = req.body;
   const sql = 'UPDATE vendors SET name=?, category=?, phone=?, location=?, description=?, facebook=?, email=?, updated_at=CURRENT_TIMESTAMP WHERE id=?';
-  db.run(sql, [name, category, phone, location, description, facebook, email, req.params.id], function(err) {
+  db.run(sql, [name, category, phone, location, description, facebook, email, targetId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Vendor updated successfully', changes: this.changes });
   });
 });
 
-// Delete vendor
-app.delete('/api/vendors/:id', (req, res) => {
-  db.run('DELETE FROM vendors WHERE id = ?', [req.params.id], function(err) {
+// Delete vendor (Protected & ownership verified)
+app.delete('/api/vendors/:id', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only delete your own vendor profile' });
+  }
+  db.run('DELETE FROM vendors WHERE id = ?', [targetId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Vendor deleted successfully', changes: this.changes });
   });
@@ -364,9 +507,12 @@ app.delete('/api/vendors/:id', (req, res) => {
 
 // ============== PRODUCT ROUTES ==============
 
-// Create product
-app.post('/api/products', (req, res) => {
+// Create product (Protected & ownership verified)
+app.post('/api/products', authMiddleware, (req, res) => {
   const { vendor_id, name, category, price, stock, description, status } = req.body;
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(vendor_id))) {
+    return res.status(403).json({ error: 'Forbidden: You cannot create products for another vendor' });
+  }
   const sql = 'INSERT INTO products (vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?)';
   db.run(sql, [vendor_id, name, category, price, stock || 0, description, status || 'active'], function(err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -374,22 +520,40 @@ app.post('/api/products', (req, res) => {
   });
 });
 
-// Upload product images
-app.post('/api/products/:id/images', upload.array('images', 5), (req, res) => {
+// Upload product images (Protected & ownership verified)
+app.post('/api/products/:id/images', authMiddleware, upload.array('images', 5), (req, res) => {
   const productId = req.params.id;
-  const files = req.files;
-  if (!files || files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
-  const sql = 'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)';
-  let completed = 0;
-  files.forEach((file, index) => {
-    const imageUrl = `/uploads/${file.filename}`;
-    const isPrimary = index === 0 ? 1 : 0;
-    db.run(sql, [productId, imageUrl, isPrimary], (err) => {
-      completed++;
-      if (completed === files.length) res.json({ message: 'Images uploaded successfully', count: files.length });
+  const proceedWithUpload = () => {
+    const files = req.files;
+    if (!files || files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
+
+    const sql = 'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)';
+    let completed = 0;
+    files.forEach((file, index) => {
+      const imageUrl = `/uploads/${file.filename}`;
+      const isPrimary = index === 0 ? 1 : 0;
+      db.run(sql, [productId, imageUrl, isPrimary], (err) => {
+        completed++;
+        if (completed === files.length) res.json({ message: 'Images uploaded successfully', count: files.length });
+      });
     });
-  });
+  };
+
+  if (req.user.role === 'admin') {
+    proceedWithUpload();
+  } else if (req.user.role === 'vendor') {
+    db.get('SELECT vendor_id FROM products WHERE id = ?', [productId], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Product not found' });
+      if (row.vendor_id !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this product' });
+      }
+      proceedWithUpload();
+    });
+  } else {
+    res.status(403).json({ error: 'Forbidden' });
+  }
 });
 
 // Get all products
@@ -412,19 +576,39 @@ app.get('/api/vendors/:vendorId/products', (req, res) => {
   });
 });
 
-// Delete product
-app.delete('/api/products/:id', (req, res) => {
-  db.run('DELETE FROM products WHERE id = ?', [req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Product deleted successfully', changes: this.changes });
-  });
+// Delete product (Protected & ownership verified)
+app.delete('/api/products/:id', authMiddleware, (req, res) => {
+  const productId = req.params.id;
+  if (req.user.role === 'admin') {
+    db.run('DELETE FROM products WHERE id = ?', [productId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Product deleted successfully', changes: this.changes });
+    });
+  } else if (req.user.role === 'vendor') {
+    db.get('SELECT vendor_id FROM products WHERE id = ?', [productId], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Product not found' });
+      if (row.vendor_id !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this product' });
+      }
+      db.run('DELETE FROM products WHERE id = ?', [productId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Product deleted successfully', changes: this.changes });
+      });
+    });
+  } else {
+    res.status(403).json({ error: 'Forbidden' });
+  }
 });
 
 // ============== SERVICE ROUTES ==============
 
-// Create service
-app.post('/api/services', upload.single('image'), (req, res) => {
+// Create service (Protected & ownership verified)
+app.post('/api/services', authMiddleware, upload.single('image'), (req, res) => {
   const { vendor_id, name, category, price, duration, description } = req.body;
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(vendor_id))) {
+    return res.status(403).json({ error: 'Forbidden: You cannot create services for another vendor' });
+  }
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
   const sql = 'INSERT INTO services (vendor_id, name, category, price, duration, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)';
   db.run(sql, [vendor_id, name, category, price, duration || 0, description, imageUrl], function(err) {
@@ -442,12 +626,29 @@ app.get('/api/services', (req, res) => {
   });
 });
 
-// Delete service
-app.delete('/api/services/:id', (req, res) => {
-  db.run('DELETE FROM services WHERE id = ?', [req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Service deleted successfully', changes: this.changes });
-  });
+// Delete service (Protected & ownership verified)
+app.delete('/api/services/:id', authMiddleware, (req, res) => {
+  const serviceId = req.params.id;
+  if (req.user.role === 'admin') {
+    db.run('DELETE FROM services WHERE id = ?', [serviceId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Service deleted successfully', changes: this.changes });
+    });
+  } else if (req.user.role === 'vendor') {
+    db.get('SELECT vendor_id FROM services WHERE id = ?', [serviceId], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Service not found' });
+      if (row.vendor_id !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this service' });
+      }
+      db.run('DELETE FROM services WHERE id = ?', [serviceId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Service deleted successfully', changes: this.changes });
+      });
+    });
+  } else {
+    res.status(403).json({ error: 'Forbidden' });
+  }
 });
 
 // ============== ORDER ROUTES ==============
@@ -462,9 +663,13 @@ app.post('/api/orders', (req, res) => {
   });
 });
 
-// Get orders by vendor
-app.get('/api/vendors/:vendorId/orders', (req, res) => {
-  db.all('SELECT * FROM orders WHERE vendor_id = ? ORDER BY created_at DESC', [req.params.vendorId], (err, rows) => {
+// Get orders by vendor (Protected & tenant-scoped)
+app.get('/api/vendors/:vendorId/orders', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(req.params.vendorId))) {
+    return res.status(403).json({ error: 'Forbidden: You can only read your own orders' });
+  }
+  const vendorId = req.user.role === 'admin' ? parseInt(req.params.vendorId) : req.user.id;
+  db.all('SELECT * FROM orders WHERE vendor_id = ? ORDER BY created_at DESC', [vendorId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -549,13 +754,34 @@ app.put('/api/orders/:id/status', (req, res) => {
 
 // ============== ADMIN ROUTES ==============
 
+// Admin Authentication and Protection Middleware
+app.use('/api/admin', (req, res, next) => {
+  if (req.path === '/login' || req.originalUrl === '/api/admin/login') {
+    return next();
+  }
+  authMiddleware(req, res, () => {
+    if (req.user && req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({ error: 'Forbidden: Admin access required' });
+    }
+  });
+});
+
 // Admin Login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
-  db.get('SELECT * FROM admins WHERE username = ? AND password = ?', [username, password], (err, row) => {
+  db.get('SELECT * FROM admins WHERE username = ?', [username], async (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(401).json({ error: 'Invalid admin credentials' });
-    res.json({ message: 'Admin logged in', admin: { id: row.id, username: row.username } });
+    try {
+      const isMatch = await bcrypt.compare(password, row.password);
+      if (!isMatch) return res.status(401).json({ error: 'Invalid admin credentials' });
+      const token = jwt.sign({ id: row.id, role: 'admin', username: row.username }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ message: 'Admin logged in', admin: { id: row.id, username: row.username }, token });
+    } catch (compareErr) {
+      res.status(500).json({ error: compareErr.message });
+    }
   });
 });
 
@@ -649,30 +875,56 @@ app.get('/api/stats', (req, res) => {
 
 // ============== ACCOUNTING ROUTES ==============
 
-// Get accounting transactions for a vendor
-app.get('/api/vendors/:vendorId/accounting', (req, res) => {
-  db.all('SELECT * FROM accounting_transactions WHERE vendor_id = ? ORDER BY date DESC', [req.params.vendorId], (err, rows) => {
+// Get accounting transactions for a vendor (Protected & tenant-scoped)
+app.get('/api/vendors/:vendorId/accounting', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(req.params.vendorId))) {
+    return res.status(403).json({ error: 'Forbidden: You can only read your own accounting transactions' });
+  }
+  const vendorId = req.user.role === 'admin' ? parseInt(req.params.vendorId) : req.user.id;
+  db.all('SELECT * FROM accounting_transactions WHERE vendor_id = ? ORDER BY date DESC', [vendorId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// Create accounting transaction
-app.post('/api/accounting', (req, res) => {
-  const { vendor_id, date, type, amount, description, gst, swt } = req.body;
+// Create accounting transaction (Protected & tenant-scoped)
+app.post('/api/accounting', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'vendor') {
+    return res.status(403).json({ error: 'Forbidden: Vendors only' });
+  }
+  const { date, type, amount, description, gst, swt } = req.body;
+  // Pull vendor_id from JWT token, not from body (unless admin overrides)
+  const vendorId = req.user.role === 'admin' ? parseInt(req.body.vendor_id) : req.user.id;
   const sql = 'INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [vendor_id, date, type, amount, description, gst || 0, swt || 0], function(err) {
+  db.run(sql, [vendorId, date, type, amount, description, gst || 0, swt || 0], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, message: 'Transaction recorded successfully' });
   });
 });
 
-// Delete accounting transaction
-app.delete('/api/accounting/:id', (req, res) => {
-  db.run('DELETE FROM accounting_transactions WHERE id = ?', [req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Transaction deleted successfully' });
-  });
+// Delete accounting transaction (Protected & ownership verified)
+app.delete('/api/accounting/:id', authMiddleware, (req, res) => {
+  const transId = req.params.id;
+  if (req.user.role === 'admin') {
+    db.run('DELETE FROM accounting_transactions WHERE id = ?', [transId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Transaction deleted successfully' });
+    });
+  } else if (req.user.role === 'vendor') {
+    db.get('SELECT vendor_id FROM accounting_transactions WHERE id = ?', [transId], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Transaction not found' });
+      if (row.vendor_id !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this transaction' });
+      }
+      db.run('DELETE FROM accounting_transactions WHERE id = ?', [transId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Transaction deleted successfully' });
+      });
+    });
+  } else {
+    res.status(403).json({ error: 'Forbidden' });
+  }
 });
 
 // ============== PAYMENTS ROUTES ==============
@@ -740,8 +992,12 @@ app.post('/api/bot/command', (req, res) => {
 
 // ============== LOYALTY & CRM ROUTES ==============
 
-// Get CRM customers for a vendor
-app.get('/api/vendors/:vendorId/crm', (req, res) => {
+// Get CRM customers for a vendor (Protected & tenant-scoped)
+app.get('/api/vendors/:vendorId/crm', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(req.params.vendorId))) {
+    return res.status(403).json({ error: 'Forbidden: You can only read your own CRM data' });
+  }
+  const vendorId = req.user.role === 'admin' ? parseInt(req.params.vendorId) : req.user.id;
   const sql = `
     SELECT c.*, l.current_points, l.total_earned_points
     FROM customer_crm c
@@ -749,7 +1005,7 @@ app.get('/api/vendors/:vendorId/crm', (req, res) => {
     WHERE c.vendor_id = ?
     ORDER BY c.last_visit DESC
   `;
-  db.all(sql, [req.params.vendorId], (err, rows) => {
+  db.all(sql, [vendorId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -769,11 +1025,15 @@ app.get('/api/vendors/:vendorId/loyalty/:phone', (req, res) => {
   });
 });
 
-// Mock endpoint for sending promotions
-app.post('/api/vendors/:vendorId/promotions', (req, res) => {
+// Mock endpoint for sending promotions (Protected & tenant-scoped)
+app.post('/api/vendors/:vendorId/promotions', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(req.params.vendorId))) {
+    return res.status(403).json({ error: 'Forbidden: You can only send promotions for your own store' });
+  }
+  const vendorId = req.user.role === 'admin' ? parseInt(req.params.vendorId) : req.user.id;
   const { customerIds, message, channel } = req.body;
   // In a real app, this would integrate with Twilio or WhatsApp Business API
-  console.log(`Sending ${channel} promotion to ${customerIds.length} customers from vendor ${req.params.vendorId}: ${message}`);
+  console.log(`Sending ${channel} promotion to ${customerIds.length} customers from vendor ${vendorId}: ${message}`);
   res.json({ message: `Promotion sent successfully to ${customerIds.length} customers via ${channel}!` });
 });
 
