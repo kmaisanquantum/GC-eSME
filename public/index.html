@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#ca8a04">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1285,6 +1287,54 @@
             console.error('Service Worker registration failed:', error);
           });
       });
+    }
+
+    // Connection and Sync Progress Indicators
+    const statusIndicator = document.createElement('div');
+    statusIndicator.id = 'pwa-network-status';
+    statusIndicator.style.cssText = 'position:fixed; bottom:80px; right:20px; padding:12px 24px; border-radius:30px; font-size:14px; font-weight:bold; z-index:10000; transition:all 0.3s; display:none; box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+    document.body.appendChild(statusIndicator);
+
+    function updateNetworkStatus() {
+      if (navigator.onLine) {
+        statusIndicator.style.background = '#10b981';
+        statusIndicator.style.color = '#fff';
+        statusIndicator.textContent = '🟢 Online - Syncing data...';
+        statusIndicator.style.display = 'block';
+
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+          navigator.serviceWorker.ready.then(reg => {
+            return reg.sync.register('replay-mutations');
+          }).then(() => {
+            setTimeout(() => {
+              statusIndicator.textContent = '✅ Connected & Synced!';
+              setTimeout(() => {
+                statusIndicator.style.display = 'none';
+              }, 2000);
+            }, 1500);
+          }).catch(err => {
+            console.error('Sync registration failed:', err);
+            setTimeout(() => {
+              statusIndicator.style.display = 'none';
+            }, 2000);
+          });
+        } else {
+          setTimeout(() => {
+            statusIndicator.style.display = 'none';
+          }, 2000);
+        }
+      } else {
+        statusIndicator.style.background = '#ef4444';
+        statusIndicator.style.color = '#fff';
+        statusIndicator.textContent = '🔴 Offline Mode - Changes will sync later';
+        statusIndicator.style.display = 'block';
+      }
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    if (!navigator.onLine) {
+      updateNetworkStatus();
     }
 
 
