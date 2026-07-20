@@ -82,6 +82,48 @@ function tenantResolver(req, res, next) {
 
 app.use('/api', tenantResolver);
 
+// GET /api/tenant/branding (Public, tenant-resolved)
+app.get('/api/tenant/branding', (req, res) => {
+  const tenantId = req.tenantId || 1;
+  const gcDefaultBranding = {
+    primaryColor: '#ca8a04',
+    primaryHover: '#a16207',
+    themeColor: '#ca8a04',
+    appName: 'Garden City SME'
+  };
+
+  db.get('SELECT id, slug, name, domain, branding_json FROM tenants WHERE id = ?', [tenantId], (err, row) => {
+    if (err || !row) {
+      return res.json({
+        id: 1,
+        slug: 'gc',
+        name: 'Garden City',
+        domain: 'gc.dspng.tech',
+        branding: gcDefaultBranding
+      });
+    }
+
+    let branding = {};
+    try {
+      if (row.branding_json) {
+        branding = JSON.parse(row.branding_json);
+      } else {
+        branding = gcDefaultBranding;
+      }
+    } catch (e) {
+      branding = gcDefaultBranding;
+    }
+
+    res.json({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      domain: row.domain,
+      branding: branding
+    });
+  });
+});
+
 app.use('/uploads', express.static('uploads'));
 app.use(express.static('public'));
 
@@ -117,9 +159,25 @@ function initDatabase() {
       )
     `);
 
-    // Seed default tenants
-    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain) VALUES (1, 'gc', 'Garden City', 'gc.dspng.tech')`);
-    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain) VALUES (2, 'unity', 'Unity Mall', 'unity.dspng.tech')`);
+    // Seed default tenants with branding info
+    const gcBranding = JSON.stringify({
+      primaryColor: '#ca8a04',
+      primaryHover: '#a16207',
+      themeColor: '#ca8a04',
+      appName: 'Garden City SME'
+    });
+    const unityBranding = JSON.stringify({
+      primaryColor: '#0f766e',
+      primaryHover: '#0d9488',
+      themeColor: '#0f766e',
+      appName: 'Unity Mall SME Centre'
+    });
+    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain, branding_json) VALUES (1, 'gc', 'Garden City', 'gc.dspng.tech', ?)`, [gcBranding]);
+    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain, branding_json) VALUES (2, 'unity', 'Unity Mall', 'unity.dspng.tech', ?)`, [unityBranding]);
+
+    // Idempotent UPDATEs so it doesn't overwrite later edits, only targeting NULL or empty values
+    db.run(`UPDATE tenants SET branding_json = ? WHERE id = 1 AND branding_json IS NULL`, [gcBranding]);
+    db.run(`UPDATE tenants SET branding_json = ? WHERE id = 2 AND branding_json IS NULL`, [unityBranding]);
 
     // Vendors table
     db.run(`
