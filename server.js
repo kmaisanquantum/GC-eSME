@@ -48,6 +48,40 @@ app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+
+// Tenant Resolver Middleware
+function tenantResolver(req, res, next) {
+  const host = req.get('host') || '';
+  const fallbackParam = req.query.tenant || req.get('X-Tenant') || req.get('x-tenant');
+
+  if (fallbackParam) {
+    const query = 'SELECT id FROM tenants WHERE slug = ? OR id = ?';
+    db.get(query, [fallbackParam, fallbackParam], (err, row) => {
+      if (row) {
+        req.tenantId = row.id;
+        return next();
+      }
+      resolveByHost();
+    });
+  } else {
+    resolveByHost();
+  }
+
+  function resolveByHost() {
+    const hostname = host.split(':')[0];
+    db.get('SELECT id FROM tenants WHERE domain = ? OR slug = ?', [hostname, hostname], (err, row) => {
+      if (row) {
+        req.tenantId = row.id;
+        return next();
+      }
+      req.tenantId = 1; // Default fallback to gc
+      next();
+    });
+  }
+}
+
+app.use('/api', tenantResolver);
+
 app.use('/uploads', express.static('uploads'));
 app.use(express.static('public'));
 
@@ -70,10 +104,28 @@ const db = new sqlite3.Database(dbPath, (err) => {
 // Initialize database tables
 function initDatabase() {
   db.serialize(() => {
+    // Tenants table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS tenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT UNIQUE,
+        name TEXT,
+        domain TEXT,
+        branding_json TEXT,
+        config_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default tenants
+    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain) VALUES (1, 'gc', 'Garden City', 'gc.dspng.tech')`);
+    db.run(`INSERT OR IGNORE INTO tenants (id, slug, name, domain) VALUES (2, 'unity', 'Unity Mall', 'unity.dspng.tech')`);
+
     // Vendors table
     db.run(`
       CREATE TABLE IF NOT EXISTS vendors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         name TEXT NOT NULL,
         loyalty_rate REAL DEFAULT 1.0,
         category TEXT NOT NULL,
@@ -86,7 +138,8 @@ function initDatabase() {
         social_provider TEXT,
         social_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -94,16 +147,19 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         category TEXT NOT NULL,
         price REAL NOT NULL,
+        cost_price REAL DEFAULT 0,
         stock INTEGER DEFAULT 0,
         description TEXT,
         status TEXT DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -123,6 +179,7 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         category TEXT NOT NULL,
@@ -132,7 +189,8 @@ function initDatabase() {
         image_url TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -140,14 +198,17 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         customer_name TEXT NOT NULL,
         customer_phone TEXT NOT NULL,
         items TEXT NOT NULL,
         total_price REAL NOT NULL,
+        cogs REAL DEFAULT 0,
         status TEXT DEFAULT 'pending',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -195,12 +256,11 @@ function initDatabase() {
       }
     });
 
-
-
     // Customer CRM Table
     db.run(`
       CREATE TABLE IF NOT EXISTS customer_crm (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         phone_number TEXT NOT NULL,
         full_name TEXT,
@@ -208,7 +268,8 @@ function initDatabase() {
         last_visit DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(vendor_id, phone_number),
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -230,15 +291,18 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS accounting_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         date TEXT NOT NULL,
         type TEXT NOT NULL,
         amount REAL NOT NULL,
         description TEXT,
+        category TEXT,
         gst REAL DEFAULT 0,
         swt REAL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -246,6 +310,7 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         vendor_id INTEGER NOT NULL,
         order_id INTEGER,
         amount REAL NOT NULL,
@@ -256,7 +321,8 @@ function initDatabase() {
         provider_txn_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
-        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
 
@@ -265,6 +331,29 @@ function initDatabase() {
       // Ignore if column already exists
     });
     db.run("ALTER TABLE payments ADD COLUMN provider_txn_id TEXT", (err) => {
+      // Ignore if column already exists
+    });
+
+    // Guarded migrations for tenant_id in existing tables
+    const tablesToAlter = [
+      'vendors', 'products', 'services', 'orders',
+      'customer_crm', 'accounting_transactions', 'payments'
+    ];
+    tablesToAlter.forEach((table) => {
+      db.run(`ALTER TABLE ${table} ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE SET NULL`, (err) => {
+        // Run update query regardless, to backfill any NULL tenant_ids to Garden City tenant (ID 1)
+        db.run(`UPDATE ${table} SET tenant_id = 1 WHERE tenant_id IS NULL`);
+      });
+    });
+
+    // Migrations for profit/COGS and expense category columns
+    db.run("ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0", (err) => {
+      // Ignore if column already exists
+    });
+    db.run("ALTER TABLE orders ADD COLUMN cogs REAL DEFAULT 0", (err) => {
+      // Ignore if column already exists
+    });
+    db.run("ALTER TABLE accounting_transactions ADD COLUMN category TEXT", (err) => {
       // Ignore if column already exists
     });
 
@@ -319,6 +408,10 @@ function authMiddleware(req, res, next) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
     req.user = decoded;
+    // A non-admin user/vendor token's tenant_id must match the resolved tenantId
+    if (req.user.role !== 'admin' && req.user.tenant_id && parseInt(req.user.tenant_id) !== parseInt(req.tenantId)) {
+      return res.status(403).json({ error: 'Forbidden: Tenant mismatch' });
+    }
     next();
   });
 }
@@ -330,12 +423,13 @@ app.post('/api/auth/register', async (req, res) => {
   const { name, category, phone, location, description, facebook, password, email } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    db.run(sql, [name, category, phone, location, description, facebook, hashedPassword, email, req.body.loyalty_rate || 1.0], function(err) {
+    const tenantId = req.tenantId || 1;
+    const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    db.run(sql, [name, category, phone, location, description, facebook, hashedPassword, email, req.body.loyalty_rate || 1.0, tenantId], function(err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      const token = jwt.sign({ id: this.lastID, role: 'vendor', email }, JWT_SECRET, { expiresIn: '24h' });
+      const token = jwt.sign({ id: this.lastID, role: 'vendor', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ id: this.lastID, message: 'Vendor registered successfully', token });
     });
   } catch (err) {
@@ -352,7 +446,7 @@ app.post('/api/auth/login', (req, res) => {
     try {
       const isMatch = await bcrypt.compare(password, row.password);
       if (!isMatch) return res.status(401).json({ error: 'Invalid email or password' });
-      const token = jwt.sign({ id: row.id, role: 'vendor', email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      const token = jwt.sign({ id: row.id, role: 'vendor', email: row.email, tenant_id: row.tenant_id }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ message: 'Login successful', vendor: row, token });
     } catch (compareErr) {
       res.status(500).json({ error: compareErr.message });
@@ -399,7 +493,7 @@ app.post("/api/auth/social", async (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
 
     if (row) {
-      const jwtToken = jwt.sign({ id: row.id, role: role, email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      const jwtToken = jwt.sign({ id: row.id, role: role, email: row.email, tenant_id: row.tenant_id }, JWT_SECRET, { expiresIn: '24h' });
       return res.json({ message: "Login successful", [role === 'vendor' ? 'vendor' : 'user']: row, token: jwtToken });
     } else {
       // Check if a user/vendor already exists with this email
@@ -413,17 +507,18 @@ app.post("/api/auth/social", async (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             existingRow.social_provider = provider;
             existingRow.social_id = id;
-            const jwtToken = jwt.sign({ id: existingRow.id, role: role, email: existingRow.email }, JWT_SECRET, { expiresIn: '24h' });
+            const jwtToken = jwt.sign({ id: existingRow.id, role: role, email: existingRow.email, tenant_id: existingRow.tenant_id }, JWT_SECRET, { expiresIn: '24h' });
             res.json({ message: "Social account linked", [role === 'vendor' ? 'vendor' : 'user']: existingRow, token: jwtToken });
           });
         } else {
           // Create new record
+          const tenantId = req.tenantId || 1;
           if (role === 'vendor') {
-             const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone) VALUES (?, ?, ?, ?, ?, ?, ?)";
-             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', ''], function(err) {
+             const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', '', tenantId], function(err) {
                if (err) return res.status(500).json({ error: err.message });
-               const vendor = { id: this.lastID, name, email, social_provider: provider, social_id: id };
-               const jwtToken = jwt.sign({ id: this.lastID, role: role, email }, JWT_SECRET, { expiresIn: '24h' });
+               const vendor = { id: this.lastID, name, email, social_provider: provider, social_id: id, tenant_id: tenantId };
+               const jwtToken = jwt.sign({ id: this.lastID, role: role, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
                res.json({ message: "Social vendor account created", vendor, token: jwtToken });
              });
           } else {
@@ -431,7 +526,7 @@ app.post("/api/auth/social", async (req, res) => {
              db.run(sql, [name, email, provider, id], function(err) {
                if (err) return res.status(500).json({ error: err.message });
                const user = { id: this.lastID, name, email, social_provider: provider, social_id: id };
-               const jwtToken = jwt.sign({ id: this.lastID, role: role, email }, JWT_SECRET, { expiresIn: '24h' });
+               const jwtToken = jwt.sign({ id: this.lastID, role: role, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
                res.json({ message: "Social customer account created", user, token: jwtToken });
              });
           }
@@ -448,7 +543,8 @@ app.post("/api/auth/customer/register", async (req, res) => {
     const sql = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
     db.run(sql, [name, email, phone, hashedPassword], function(err) {
       if (err) return res.status(500).json({ error: err.message });
-      const token = jwt.sign({ id: this.lastID, role: 'customer', email }, JWT_SECRET, { expiresIn: '24h' });
+      const tenantId = req.tenantId || 1;
+      const token = jwt.sign({ id: this.lastID, role: 'customer', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ id: this.lastID, message: "Customer registered successfully", token });
     });
   } catch (err) {
@@ -465,7 +561,8 @@ app.post("/api/auth/customer/login", (req, res) => {
     try {
       const isMatch = await bcrypt.compare(password, row.password);
       if (!isMatch) return res.status(401).json({ error: "Invalid email or password" });
-      const token = jwt.sign({ id: row.id, role: 'customer', email: row.email }, JWT_SECRET, { expiresIn: '24h' });
+      const tenantId = req.tenantId || 1;
+      const token = jwt.sign({ id: row.id, role: 'customer', email: row.email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ message: "Login successful", user: row, token });
     } catch (compareErr) {
       res.status(500).json({ error: compareErr.message });
@@ -477,7 +574,7 @@ app.post("/api/auth/customer/login", (req, res) => {
 
 // Get all vendors
 app.get('/api/vendors', (req, res) => {
-  db.all('SELECT id, name, category, phone, location, description, facebook, email, created_at FROM vendors', [], (err, rows) => {
+  db.all('SELECT id, name, category, phone, location, description, facebook, email, created_at FROM vendors WHERE tenant_id = ?', [req.tenantId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -485,7 +582,7 @@ app.get('/api/vendors', (req, res) => {
 
 // Get vendor by ID with data minimization (safe columns only)
 app.get('/api/vendors/:id', (req, res) => {
-  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ?', [req.params.id], (err, row) => {
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [req.params.id, req.tenantId], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Vendor not found' });
     res.json(row);
@@ -498,7 +595,7 @@ app.get('/api/vendors/me/:id', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
     return res.status(403).json({ error: 'Forbidden: You can only read your own vendor profile' });
   }
-  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ?', [targetId], (err, row) => {
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [targetId, req.tenantId], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Vendor not found' });
     res.json(row);
@@ -531,16 +628,145 @@ app.delete('/api/vendors/:id', authMiddleware, (req, res) => {
   });
 });
 
+// GET /api/vendors/:vendorId/dashboard (Protected, tenant + owner scoped)
+app.get('/api/vendors/:vendorId/dashboard', authMiddleware, (req, res) => {
+  const vendorId = parseInt(req.params.vendorId);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== vendorId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only view your own dashboard' });
+  }
+
+  const todayDate = new Date().toISOString().split('T')[0];
+  const todayStartStr = todayDate + ' 00:00:00';
+
+  // We can fetch today's sales and COGS
+  const salesQuery = `
+    SELECT SUM(total_price) AS today_sales, SUM(cogs) AS today_cogs
+    FROM orders
+    WHERE vendor_id = ? AND status = 'completed' AND created_at >= ?
+  `;
+
+  // We can fetch today's expenses
+  const expensesQuery = `
+    SELECT SUM(amount) AS today_expenses
+    FROM accounting_transactions
+    WHERE vendor_id = ? AND type = 'expense' AND date = ?
+  `;
+
+  // Fetch inventory value
+  const inventoryQuery = `
+    SELECT SUM(stock * cost_price) AS inventory_value
+    FROM products
+    WHERE vendor_id = ?
+  `;
+
+  // Fetch low stock items
+  const lowStockQuery = `
+    SELECT id, name, stock, stock_threshold
+    FROM products
+    WHERE vendor_id = ? AND stock <= stock_threshold
+  `;
+
+  // Fetch completed orders to calculate best-selling and slow-moving in JS
+  const ordersQuery = `
+    SELECT items
+    FROM orders
+    WHERE vendor_id = ? AND status = 'completed'
+  `;
+
+  // Fetch all products to match with sales
+  const productsQuery = `
+    SELECT id, name, stock, cost_price, price
+    FROM products
+    WHERE vendor_id = ?
+  `;
+
+  db.get(salesQuery, [vendorId, todayStartStr], (err, salesRow) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.get(expensesQuery, [vendorId, todayDate], (err, expensesRow) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      db.get(inventoryQuery, [vendorId], (err, invRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.all(lowStockQuery, [vendorId], (err, lowStockRows) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          db.all(ordersQuery, [vendorId], (err, orderRows) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            db.all(productsQuery, [vendorId], (err, productRows) => {
+              if (err) return res.status(500).json({ error: err.message });
+
+              // Calculate sales quantities in JS
+              const productSales = {};
+              orderRows.forEach(order => {
+                try {
+                  const items = JSON.parse(order.items);
+                  items.forEach(item => {
+                    productSales[item.id] = (productSales[item.id] || 0) + (item.quantity || 0);
+                  });
+                } catch (e) {}
+              });
+
+              // Map sales quantities back to products
+              const productsWithSales = productRows.map(p => ({
+                id: p.id,
+                name: p.name,
+                stock: p.stock,
+                cost_price: p.cost_price,
+                price: p.price,
+                quantity_sold: productSales[p.id] || 0
+              }));
+
+              // Best selling: sort descending by quantity_sold
+              const bestSelling = [...productsWithSales]
+                .filter(p => p.quantity_sold > 0)
+                .sort((a, b) => b.quantity_sold - a.quantity_sold)
+                .slice(0, 5);
+
+              // Slow moving: sort ascending by quantity_sold (include products with 0 sales)
+              const slowMoving = [...productsWithSales]
+                .sort((a, b) => a.quantity_sold - b.quantity_sold)
+                .slice(0, 5);
+
+              const todaySales = salesRow ? (salesRow.today_sales || 0) : 0;
+              const todayCOGS = salesRow ? (salesRow.today_cogs || 0) : 0;
+              const todayExpenses = expensesRow ? (expensesRow.today_expenses || 0) : 0;
+
+              const grossProfit = todaySales - todayCOGS;
+              const netProfit = grossProfit - todayExpenses;
+
+              res.json({
+                today_sales: todaySales,
+                today_expenses: todayExpenses,
+                today_cogs: todayCOGS,
+                estimated_gross_profit: grossProfit,
+                estimated_net_profit: netProfit,
+                inventory_value: invRow ? (invRow.inventory_value || 0) : 0,
+                best_selling_products: bestSelling,
+                slow_moving_products: slowMoving,
+                low_stock_items: lowStockRows
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
 // ============== PRODUCT ROUTES ==============
 
 // Create product (Protected & ownership verified)
 app.post('/api/products', authMiddleware, (req, res) => {
-  const { vendor_id, name, category, price, stock, description, status } = req.body;
+  const { vendor_id, name, category, price, cost_price, stock, description, status } = req.body;
   if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== parseInt(vendor_id))) {
     return res.status(403).json({ error: 'Forbidden: You cannot create products for another vendor' });
   }
-  const sql = 'INSERT INTO products (vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [vendor_id, name, category, price, stock || 0, description, status || 'active'], function(err) {
+  const tenantId = req.tenantId || 1;
+  const sql = 'INSERT INTO products (vendor_id, name, category, price, cost_price, stock, description, status, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [vendor_id, name, category, price, cost_price || 0, stock || 0, description, status || 'active', tenantId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, message: 'Product created successfully' });
   });
@@ -584,8 +810,8 @@ app.post('/api/products/:id/images', authMiddleware, upload.array('images', 5), 
 
 // Get all products
 app.get('/api/products', (req, res) => {
-  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id LEFT JOIN vendors v ON p.vendor_id = v.id GROUP BY p.id ORDER BY p.created_at DESC';
-  db.all(sql, [], (err, rows) => {
+  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id LEFT JOIN vendors v ON p.vendor_id = v.id WHERE p.tenant_id = ? GROUP BY p.id ORDER BY p.created_at DESC';
+  db.all(sql, [req.tenantId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const products = rows.map(row => ({ ...row, images: row.images ? row.images.split(',') : [] }));
     res.json(products);
@@ -594,8 +820,8 @@ app.get('/api/products', (req, res) => {
 
 // Get products by vendor
 app.get('/api/vendors/:vendorId/products', (req, res) => {
-  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id WHERE p.vendor_id = ? GROUP BY p.id ORDER BY p.created_at DESC';
-  db.all(sql, [req.params.vendorId], (err, rows) => {
+  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id WHERE p.vendor_id = ? AND p.tenant_id = ? GROUP BY p.id ORDER BY p.created_at DESC';
+  db.all(sql, [req.params.vendorId, req.tenantId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const products = rows.map(row => ({ ...row, images: row.images ? row.images.split(',') : [] }));
     res.json(products);
@@ -636,8 +862,9 @@ app.post('/api/services', authMiddleware, upload.single('image'), (req, res) => 
     return res.status(403).json({ error: 'Forbidden: You cannot create services for another vendor' });
   }
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
-  const sql = 'INSERT INTO services (vendor_id, name, category, price, duration, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [vendor_id, name, category, price, duration || 0, description, imageUrl], function(err) {
+  const tenantId = req.tenantId || 1;
+  const sql = 'INSERT INTO services (vendor_id, name, category, price, duration, description, image_url, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [vendor_id, name, category, price, duration || 0, description, imageUrl, tenantId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, message: 'Service created successfully' });
   });
@@ -645,8 +872,8 @@ app.post('/api/services', authMiddleware, upload.single('image'), (req, res) => 
 
 // Get all services
 app.get('/api/services', (req, res) => {
-  const sql = 'SELECT s.*, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location FROM services s LEFT JOIN vendors v ON s.vendor_id = v.id ORDER BY s.created_at DESC';
-  db.all(sql, [], (err, rows) => {
+  const sql = 'SELECT s.*, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location FROM services s LEFT JOIN vendors v ON s.vendor_id = v.id WHERE s.tenant_id = ? ORDER BY s.created_at DESC';
+  db.all(sql, [req.tenantId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -679,13 +906,25 @@ app.delete('/api/services/:id', authMiddleware, (req, res) => {
 
 // ============== ORDER ROUTES ==============
 
-// Create order
-app.post('/api/orders', (req, res) => {
+// Create order (Protected & tenant-validated)
+app.post('/api/orders', authMiddleware, (req, res) => {
   const { vendor_id, customer_name, customer_phone, items, total_price } = req.body;
-  const sql = 'INSERT INTO orders (vendor_id, customer_name, customer_phone, items, total_price) VALUES (?, ?, ?, ?, ?)';
-  db.run(sql, [vendor_id, customer_name, customer_phone, JSON.stringify(items), total_price], function(err) {
+
+  // Validate that vendor_id belongs to the resolved tenant
+  db.get('SELECT tenant_id FROM vendors WHERE id = ?', [vendor_id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, message: 'Order created successfully' });
+    if (!row) return res.status(400).json({ error: 'Vendor not found' });
+
+    if (parseInt(row.tenant_id) !== parseInt(req.tenantId)) {
+      return res.status(403).json({ error: 'Forbidden: Vendor does not belong to the active tenant' });
+    }
+
+    const tenantId = req.tenantId || 1;
+    const sql = 'INSERT INTO orders (vendor_id, customer_name, customer_phone, items, total_price, tenant_id) VALUES (?, ?, ?, ?, ?, ?)';
+    db.run(sql, [vendor_id, customer_name, customer_phone, JSON.stringify(items), total_price, tenantId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, message: 'Order created successfully' });
+    });
   });
 });
 
@@ -703,7 +942,7 @@ app.get('/api/vendors/:vendorId/orders', authMiddleware, (req, res) => {
 
 // Update order status
 
-// Update order status and trigger inventory/accounting automation
+// Update order status and trigger inventory/accounting automation with atomic SQLite transaction
 app.put('/api/orders/:id/status', (req, res) => {
   const { status } = req.body;
   const orderId = req.params.id;
@@ -711,69 +950,150 @@ app.put('/api/orders/:id/status', (req, res) => {
   db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
     if (err || !order) return res.status(500).json({ error: 'Order not found' });
 
-    db.run('UPDATE orders SET status = ? WHERE id = ?', [status, orderId], function(err) {
-      if (err) return res.status(500).json({ error: err.message });
+    // We only perform the full transaction-backed logic if status is being updated to 'completed'
+    if (status !== 'completed') {
+      // Normal update
+      db.run('UPDATE orders SET status = ? WHERE id = ?', [status, orderId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        return res.json({ message: 'Order status updated successfully' });
+      });
+      return;
+    }
 
-      if (status === 'completed') {
+    // Wrap the entire completion sequence in an SQLite transaction
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      const rollback = (errMsg) => {
+        db.run('ROLLBACK', () => {
+          res.status(500).json({ error: errMsg });
+        });
+      };
+
+      // 1. Update order status to 'completed'
+      db.run('UPDATE orders SET status = ? WHERE id = ?', [status, orderId], function(err) {
+        if (err) return rollback('Failed to update order status: ' + err.message);
+
+        // 2. Fetch all products in the order items to compute COGS and decrement stock
         const items = JSON.parse(order.items);
-        items.forEach(item => {
-          // Decrement stock
-          db.run('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?', [item.quantity, item.id]);
+        let cogs = 0;
+        let productsProcessed = 0;
 
-          // Check stock threshold
-          db.get('SELECT name, stock, stock_threshold FROM products WHERE id = ?', [item.id], (err, prod) => {
-            if (prod && prod.stock <= prod.stock_threshold) {
-              console.log(`ALERT: Stock for ${prod.name} is low (${prod.stock} left)`);
-              // In real app, send email/SMS. Here we just log.
-            }
+        if (items.length === 0) {
+          return proceedWithLoyaltyAndAccounting(0);
+        }
+
+        items.forEach(item => {
+          db.get('SELECT price, cost_price, name, stock, stock_threshold FROM products WHERE id = ?', [item.id], (err, prod) => {
+            if (err) return rollback('Failed to query product: ' + err.message);
+
+            const costPrice = prod ? prod.cost_price : 0;
+            cogs += (item.quantity * costPrice);
+
+            // Decrement stock
+            db.run('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?', [item.quantity, item.id], (err) => {
+              if (err) return rollback('Failed to update stock: ' + err.message);
+
+              // Log stock threshold alerts
+              if (prod) {
+                const currentStock = prod.stock - item.quantity;
+                if (currentStock <= prod.stock_threshold) {
+                  console.log(`ALERT: Stock for ${prod.name} is low (${currentStock} left)`);
+                }
+              }
+
+              productsProcessed++;
+              if (productsProcessed === items.length) {
+                // Update the order with computed COGS
+                db.run('UPDATE orders SET cogs = ? WHERE id = ?', [cogs, orderId], (err) => {
+                  if (err) return rollback('Failed to update COGS: ' + err.message);
+                  proceedWithLoyaltyAndAccounting(cogs);
+                });
+              }
+            });
           });
         });
 
-        // Automatically create accounting entry if not already done via payment sync
-        const date = new Date().toISOString().split('T')[0];
-        const desc = `Completed Order #${orderId} for ${order.customer_name}`;
-        const gst = order.total_price * 0.1; // 10% GST
-        const swt = order.total_price * 0.02; // 2% SWT Simulation
+        function proceedWithLoyaltyAndAccounting(finalCogs) {
+          // 3. Automatically create accounting entry if not already done via payment sync
+          const date = new Date().toISOString().split('T')[0];
+          const desc = `Completed Order #${orderId} for ${order.customer_name}`;
+          const gst = order.total_price * 0.1; // 10% GST
+          const swt = order.total_price * 0.02; // 2% SWT Simulation
 
-        // Check if already reconciled to avoid duplicate
-        db.get('SELECT id FROM accounting_transactions WHERE description LIKE ?', [`%Order #${orderId}%`], (err, trans) => {
-           if (!trans) {
-             db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-               [order.vendor_id, date, 'sale', order.total_price, desc, gst, swt]);
-           }
-        });
-      }
+          db.get('SELECT id FROM accounting_transactions WHERE description LIKE ?', [`%Order #${orderId}%`], (err, trans) => {
+            if (err) return rollback('Failed to check existing transaction: ' + err.message);
 
-             // Loyalty Points Logic
-             db.get('SELECT loyalty_rate FROM vendors WHERE id = ?', [order.vendor_id], (err, vendor) => {
-               const rate = vendor ? vendor.loyalty_rate : 1.0;
-               const pointsEarned = Math.floor(order.total_price * rate);
+            const insertAccounting = (cb) => {
+              if (!trans) {
+                db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                  [order.vendor_id, date, 'sale', order.total_price, desc, gst, swt, order.tenant_id], (err) => {
+                    if (err) return rollback('Failed to record sale: ' + err.message);
+                    cb();
+                  });
+              } else {
+                cb();
+              }
+            };
 
-               db.get('SELECT id FROM customer_crm WHERE vendor_id = ? AND phone_number = ?', [order.vendor_id, order.customer_phone], (err, customer) => {
-                 if (!customer) {
-                   db.run('INSERT INTO customer_crm (vendor_id, phone_number, full_name, total_spent) VALUES (?, ?, ?, ?)',
-                     [order.vendor_id, order.customer_phone, order.customer_name, order.total_price], function(err) {
-                       const customerId = this.lastID;
-                       db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
-                         [customerId, order.vendor_id, pointsEarned, pointsEarned]);
-                     });
-                 } else {
-                   db.run('UPDATE customer_crm SET total_spent = total_spent + ?, last_visit = CURRENT_TIMESTAMP WHERE id = ?',
-                     [order.total_price, customer.id]);
-                   db.get('SELECT id FROM loyalty_points WHERE customer_id = ? AND vendor_id = ?', [customer.id, order.vendor_id], (err, loyalty) => {
-                     if (!loyalty) {
-                       db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
-                         [customer.id, order.vendor_id, pointsEarned, pointsEarned]);
-                     } else {
-                       db.run('UPDATE loyalty_points SET current_points = current_points + ?, total_earned_points = total_earned_points + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                         [pointsEarned, pointsEarned, loyalty.id]);
-                     }
-                   });
-                 }
-               });
-             });
+            insertAccounting(() => {
+              // 4. Loyalty Points Logic
+              db.get('SELECT loyalty_rate FROM vendors WHERE id = ?', [order.vendor_id], (err, vendor) => {
+                if (err) return rollback('Failed to query vendor: ' + err.message);
+                const rate = vendor ? vendor.loyalty_rate : 1.0;
+                const pointsEarned = Math.floor(order.total_price * rate);
 
-      res.json({ message: 'Order status updated successfully' });
+                db.get('SELECT id FROM customer_crm WHERE vendor_id = ? AND phone_number = ?', [order.vendor_id, order.customer_phone], (err, customer) => {
+                  if (err) return rollback('Failed to query customer CRM: ' + err.message);
+
+                  if (!customer) {
+                    db.run('INSERT INTO customer_crm (vendor_id, phone_number, full_name, total_spent, tenant_id) VALUES (?, ?, ?, ?, ?)',
+                      [order.vendor_id, order.customer_phone, order.customer_name, order.total_price, order.tenant_id], function(err) {
+                        if (err) return rollback('Failed to create customer CRM record: ' + err.message);
+                        const customerId = this.lastID;
+                        db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
+                          [customerId, order.vendor_id, pointsEarned, pointsEarned], (err) => {
+                            if (err) return rollback('Failed to create loyalty points record: ' + err.message);
+                            finishTransaction();
+                          });
+                      });
+                  } else {
+                    db.run('UPDATE customer_crm SET total_spent = total_spent + ?, last_visit = CURRENT_TIMESTAMP WHERE id = ?',
+                      [order.total_price, customer.id], (err) => {
+                        if (err) return rollback('Failed to update customer CRM: ' + err.message);
+
+                        db.get('SELECT id FROM loyalty_points WHERE customer_id = ? AND vendor_id = ?', [customer.id, order.vendor_id], (err, loyalty) => {
+                          if (err) return rollback('Failed to query loyalty points: ' + err.message);
+
+                          if (!loyalty) {
+                            db.run('INSERT INTO loyalty_points (customer_id, vendor_id, current_points, total_earned_points) VALUES (?, ?, ?, ?)',
+                              [customer.id, order.vendor_id, pointsEarned, pointsEarned], (err) => {
+                                if (err) return rollback('Failed to create loyalty record: ' + err.message);
+                                finishTransaction();
+                              });
+                          } else {
+                            db.run('UPDATE loyalty_points SET current_points = current_points + ?, total_earned_points = total_earned_points + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                              [pointsEarned, pointsEarned, loyalty.id], (err) => {
+                                if (err) return rollback('Failed to update loyalty points: ' + err.message);
+                                finishTransaction();
+                              });
+                          }
+                        });
+                      });
+                  }
+                });
+              });
+            });
+          });
+        }
+
+        function finishTransaction() {
+          db.run('COMMIT', (err) => {
+            if (err) return rollback('Failed to commit transaction: ' + err.message);
+            res.json({ message: 'Order status updated successfully' });
+          });
+        }
+      });
     });
   });
 });
@@ -925,6 +1245,29 @@ app.post('/api/accounting', authMiddleware, (req, res) => {
   db.run(sql, [vendorId, date, type, amount, description, gst || 0, swt || 0], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, message: 'Transaction recorded successfully' });
+  });
+});
+
+// Create vendor expense transaction (Protected & tenant + owner scoped)
+app.post('/api/vendors/:vendorId/expenses', authMiddleware, (req, res) => {
+  const vendorId = parseInt(req.params.vendorId);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== vendorId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only record expenses for your own store' });
+  }
+
+  const { date, amount, description, category, gst, swt } = req.body;
+
+  // Validate category
+  const allowedCategories = ['rent', 'transport', 'stock', 'utilities', 'wages', 'marketing', 'other'];
+  if (category && !allowedCategories.includes(category.toLowerCase())) {
+    return res.status(400).json({ error: 'Invalid expense category. Must be one of: ' + allowedCategories.join(', ') });
+  }
+
+  const tenantId = req.tenantId || 1;
+  const sql = 'INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, category, gst, swt, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [vendorId, date || new Date().toISOString().split('T')[0], 'expense', amount, description, category ? category.toLowerCase() : 'other', gst || 0, swt || 0, tenantId], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID, message: 'Expense recorded successfully' });
   });
 });
 
