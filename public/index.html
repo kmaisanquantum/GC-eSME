@@ -279,16 +279,32 @@
 
     .grid-container {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 12px;
       padding: 1rem;
     }
 
+    @media (min-width: 480px) {
+      .grid-container {
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 16px;
+        padding: 1rem;
+      }
+    }
+
     @media (min-width: 768px) {
       .grid-container {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
         gap: 20px;
         padding: 1.5rem;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .grid-container {
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 24px;
+        padding: 2rem 0;
       }
     }
 
@@ -492,7 +508,10 @@
 
     .nav {
       position: fixed;
-      bottom: 0; left: 0; right: 0;
+      bottom: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 1200px;
       background: var(--bg-header);
       border-top: 2px solid var(--primary);
       display: flex;
@@ -539,11 +558,57 @@
     }
     .acc-stat { text-align: center; padding: 1rem; }
     .acc-val { font-size: 1.5rem; font-weight: 800; color: var(--text-accent); }
-    .app-footer { padding-bottom: 100px; background: var(--bg-header); border-top: 1px solid var(--border); padding: 2rem 1rem; text-align: center; font-size: 0.85rem; color: var(--text-muted); }
+    .app-footer { background: var(--bg-header); border-top: 1px solid var(--border); padding: 2rem 1rem 100px 1rem; text-align: center; font-size: 0.85rem; color: var(--text-muted); }
     .app-footer h4 { color: var(--text-accent); margin-bottom: 1rem; }
     .app-footer p { margin-bottom: 0.5rem; }
     .app-footer a { color: var(--text-accent); text-decoration: none; }
     .acc-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    @media (min-width: 768px) {
+      .hero-slider {
+        height: 300px;
+      }
+      .slide h2 {
+        font-size: 2.25rem;
+      }
+      .slide p {
+        font-size: 1.05rem;
+        max-width: 500px;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .hero-slider {
+        height: 350px;
+        border-radius: 12px;
+        margin-top: 1rem;
+      }
+      .header {
+        padding-left: calc((100% - 1200px) / 2 + 1rem);
+        padding-right: calc((100% - 1200px) / 2 + 1rem);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header h1 {
+        font-size: 1.1rem;
+      }
+      .auth-btn {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.75rem;
+      }
+      #langToggle {
+        margin: 0 4px !important;
+        font-size: 0.7rem !important;
+        padding: 2px 6px !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -817,6 +882,10 @@
 
 
     function initGSI() {
+      if (!window.google || !window.google.accounts) {
+        console.warn("Google Sign-In client library not loaded or offline.");
+        return;
+      }
       window.google.accounts.id.initialize({
         client_id: 'your-google-client-id.apps.googleusercontent.com', // To be replaced by server-side injection if possible, or just leave as placeholder
         callback: handleGoogleCallback
@@ -1083,15 +1152,15 @@
       // Check for the first vendor in cart for points
       const vendorId = cart[0].vendor_id;
       try {
-        const res = await fetch();
+        const res = await fetch(`/api/vendors/${vendorId}/loyalty/${encodeURIComponent(user.phone || user.phone_number || '')}`);
         const data = await res.json();
 
         if(display) display.classList.remove('hidden');
         if(msg) {
           if (data.current_points > 0) {
-            msg.innerHTML = ;
+            msg.innerHTML = `You have <strong>${data.current_points}</strong> loyalty points at this store!`;
           } else {
-            msg.innerHTML = ;
+            msg.innerHTML = `Shop to earn loyalty points at this store!`;
           }
         }
       } catch (err) {
