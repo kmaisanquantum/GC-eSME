@@ -1011,12 +1011,17 @@ app.get('/api/vendors/:vendorId/orders', authMiddleware, (req, res) => {
 // Update order status
 
 // Update order status and trigger inventory/accounting automation with atomic SQLite transaction
-app.put('/api/orders/:id/status', (req, res) => {
+app.put('/api/orders/:id/status', authMiddleware, (req, res) => {
   const { status } = req.body;
   const orderId = req.params.id;
 
   db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
     if (err || !order) return res.status(500).json({ error: 'Order not found' });
+
+    // Verify ownership: vendor must own order's vendor_id or be admin
+    if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== order.vendor_id)) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this order' });
+    }
 
     // We only perform the full transaction-backed logic if status is being updated to 'completed'
     if (status !== 'completed') {
