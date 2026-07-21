@@ -1,4 +1,4 @@
-const CACHE_NAME = 'garden-city-sme-v2';
+const CACHE_NAME = 'garden-city-sme-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -9,6 +9,10 @@ const ASSETS_TO_CACHE = [
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/fonts/inter-400.woff2',
+  '/fonts/inter-600.woff2',
+  '/fonts/inter-700.woff2',
+  '/fonts/inter-800.woff2',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];

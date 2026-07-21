@@ -7,6 +7,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Portal | Garden City SME</title>
   <style>
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-600.woff2') format('woff2');
+      font-weight: 600;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-700.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-800.woff2') format('woff2');
+      font-weight: 800;
+      font-style: normal;
+      font-display: swap;
+    }
+
     :root {
       --primary: #ca8a04;
       --bg-dark: #111827;
@@ -141,6 +170,44 @@
 
   <script>
     const API_URL = '/api/admin';
+
+    async function applyBranding() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tenantParam = urlParams.get('tenant') || '';
+        const headers = {};
+        if (tenantParam) {
+          headers['X-Tenant'] = tenantParam;
+        }
+        const res = await fetch('/api/tenant/branding' + (tenantParam ? `?tenant=${tenantParam}` : ''), { headers });
+        const data = await res.json();
+        if (data && data.branding) {
+          const b = data.branding;
+          const rootStyle = document.documentElement.style;
+          if (b.primaryColor) {
+            rootStyle.setProperty('--primary', b.primaryColor);
+            rootStyle.setProperty('--text-accent', b.primaryColor);
+          }
+          if (b.primaryHover) {
+            rootStyle.setProperty('--primary-hover', b.primaryHover);
+          }
+          if (b.themeColor) {
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) metaTheme.setAttribute('content', b.themeColor);
+          }
+          if (b.appName) {
+            document.title = `Admin Portal | ${b.appName}`;
+            const headerLogo = document.querySelector('.header h1');
+            if (headerLogo) headerLogo.textContent = `${b.appName} Admin`;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to apply branding:', err);
+      }
+    }
+
+    // Run dynamic branding non-blockingly on page load
+    applyBranding();
 
     document.getElementById('loginForm').onsubmit = async (e) => {
       e.preventDefault();

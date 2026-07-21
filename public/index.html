@@ -9,6 +9,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Garden City SME | Local Shopping Reimagined</title>
   <style>
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-600.woff2') format('woff2');
+      font-weight: 600;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-700.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('/fonts/inter-800.woff2') format('woff2');
+      font-weight: 800;
+      font-style: normal;
+      font-display: swap;
+    }
+
     :root {
       --primary: #ca8a04;
       --primary-hover: #a16207;
@@ -899,7 +928,57 @@
 
     // Call initGSI after GSI library is loaded or in init
 
+    async function applyBranding() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tenantParam = urlParams.get('tenant') || '';
+        const headers = {};
+        if (tenantParam) {
+          headers['X-Tenant'] = tenantParam;
+        }
+        const res = await fetch('/api/tenant/branding' + (tenantParam ? `?tenant=${tenantParam}` : ''), { headers });
+        const data = await res.json();
+        if (data && data.branding) {
+          const b = data.branding;
+          const rootStyle = document.documentElement.style;
+          if (b.primaryColor) {
+            rootStyle.setProperty('--primary', b.primaryColor);
+            rootStyle.setProperty('--text-accent', b.primaryColor);
+          }
+          if (b.primaryHover) {
+            rootStyle.setProperty('--primary-hover', b.primaryHover);
+          }
+          if (b.themeColor) {
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) metaTheme.setAttribute('content', b.themeColor);
+          }
+          if (b.appName) {
+            document.title = `${b.appName} | Local Shopping Reimagined`;
+
+            // Update any visible brand elements
+            const headerLogo = document.querySelector('.logo-container h1');
+            if (headerLogo) headerLogo.textContent = b.appName;
+
+            const firstSlideH2 = document.querySelector('.hero-slider .slide h2');
+            if (firstSlideH2) firstSlideH2.textContent = b.appName;
+
+            const wifiHeader = document.querySelector('#wifi h2');
+            if (wifiHeader) wifiHeader.textContent = `${b.appName} Wi-Fi`;
+
+            // Dynamically translate or update welcome keys if translated
+            if (translations && translations.en) {
+              translations.en.welcome = `Welcome to ${b.appName}`;
+              applyTranslations();
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to apply branding:', err);
+      }
+    }
+
     async function init() {
+      applyBranding(); // Non-blocking
       initGSI();
       await fetchProducts();
       renderCategories();
