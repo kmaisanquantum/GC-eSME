@@ -1,10 +1,9 @@
-const CACHE_NAME = 'garden-city-sme-v4';
+const CACHE_NAME = 'garden-city-sme-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/backend.html',
   '/admin.html',
-  '/index_scripts.js',
   '/garden-city.jpg',
   '/manifest.json',
   '/icons/icon-192.png',
