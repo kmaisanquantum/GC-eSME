@@ -1,4 +1,4 @@
-const CACHE_NAME = 'garden-city-sme-v3';
+const CACHE_NAME = 'garden-city-sme-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -14,7 +14,13 @@ const ASSETS_TO_CACHE = [
   '/fonts/inter-700.woff2',
   '/fonts/inter-800.woff2',
   'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://accounts.google.com/gsi/client',
+  'https://connect.facebook.net/en_US/sdk.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2'
 ];
 
 // Native IndexedDB Helper
