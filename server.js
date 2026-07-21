@@ -25,7 +25,9 @@ const apiLimiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' }
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Too many requests, please try again shortly.' });
+  }
 });
 
 // Dynamic restricted CORS origin configuration
@@ -596,11 +598,19 @@ app.post("/api/auth/social", async (req, res) => {
 
 app.post("/api/auth/customer/register", async (req, res) => {
   const { name, email, phone, password } = req.body;
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({ error: "Missing required fields (name, email, phone, password)" });
+  }
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const sql = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
     db.run(sql, [name, email, phone, hashedPassword], function(err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: "Email address is already registered" });
+        }
+        return res.status(500).json({ error: err.message });
+      }
       const tenantId = req.tenantId || 1;
       const token = jwt.sign({ id: this.lastID, role: 'customer', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ id: this.lastID, message: "Customer registered successfully", token });
@@ -1641,6 +1651,19 @@ app.post('/api/vendors/:vendorId/promotions', authMiddleware, (req, res) => {
       },
       details: results
     });
+  });
+});
+
+// Catch-all 404 for unmatched API routes
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Global JSON-returning error handling middleware
+app.use((err, req, res, next) => {
+  console.error('[GLOBAL ERROR HANDLER]', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error'
   });
 });
 
