@@ -928,6 +928,21 @@
 
     // Call initGSI after GSI library is loaded or in init
 
+    async function safeParseJSON(res, errorContext = 'Request failed') {
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          return await res.json();
+        } catch (e) {
+          throw new Error(`${errorContext} (invalid response structure).`);
+        }
+      } else {
+        const text = await res.text();
+        const friendlyText = text && text.length < 120 ? text : 'Please check your connection and try again.';
+        throw new Error(`${errorContext} (Server error ${res.status}). ${friendlyText}`);
+      }
+    }
+
     async function applyBranding() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -937,7 +952,7 @@
           headers['X-Tenant'] = tenantParam;
         }
         const res = await fetch('/api/tenant/branding' + (tenantParam ? `?tenant=${tenantParam}` : ''), { headers });
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Branding setup failed');
         if (data && data.branding) {
           const b = data.branding;
           const rootStyle = document.documentElement.style;
@@ -991,7 +1006,7 @@
     async function fetchProducts() {
       try {
         const res = await fetch('/api/products');
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Failed to fetch directory products');
         products = data.map(p => ({
           id: p.id,
           vendor_id: p.vendor_id,
@@ -1180,7 +1195,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
         });
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Login failed');
         if (data.error) throw new Error(data.error);
 
         localStorage.setItem('um_user', JSON.stringify(data.user));
@@ -1207,7 +1222,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Registration failed');
         if (data.error) throw new Error(data.error);
 
         alert('Registration successful! Please sign in.');
@@ -1232,7 +1247,7 @@
       const vendorId = cart[0].vendor_id;
       try {
         const res = await fetch(`/api/vendors/${vendorId}/loyalty/${encodeURIComponent(user.phone || user.phone_number || '')}`);
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Failed to fetch loyalty status');
 
         if(display) display.classList.remove('hidden');
         if(msg) {
@@ -1271,7 +1286,7 @@
         for (const vId of vendorIds) {
           const vendorItems = cart.filter(item => item.vendor_id === vId);
           const total = vendorItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-          await fetch('/api/orders', {
+          const res = await fetch('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1282,6 +1297,7 @@
               total_price: total
             })
           });
+          await safeParseJSON(res, 'Failed to place order');
         }
         alert('Order placed successfully! Vendors will contact you via WhatsApp.');
         cart = [];
@@ -1409,7 +1425,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ provider, role: 'customer', ...userData })
         });
-        const data = await res.json();
+        const data = await safeParseJSON(res, 'Social login failed');
         if (data.error) throw new Error(data.error);
 
         localStorage.setItem('um_user', JSON.stringify(data.user));
