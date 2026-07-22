@@ -1,4 +1,4 @@
-const CACHE_NAME = 'garden-city-sme-v5';
+const CACHE_NAME = 'garden-city-sme-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -80,6 +80,7 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
+  self.skipWaiting();
 });
 
 // Activate Event
@@ -89,6 +90,8 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
       );
+    }).then(() => {
+      return self.clients.claim();
     })
   );
 });
@@ -154,12 +157,33 @@ self.addEventListener('fetch', (event) => {
       })
     );
   } else {
-    // For static assets, use Cache-First strategy
-    event.respondWith(
-      caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
-      })
-    );
+    const isNavigation = event.request.mode === 'navigation' ||
+                         url.pathname.endsWith('.html') ||
+                         url.pathname === '/';
+
+    if (isNavigation) {
+      // For navigation and HTML, use Network-First with Cache Fallback
+      event.respondWith(
+        fetch(event.request)
+          .then((response) => {
+            if (response.ok) {
+              const responseClone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseClone);
+              });
+            }
+            return response;
+          })
+          .catch(() => caches.match(event.request))
+      );
+    } else {
+      // For static assets, use Cache-First strategy
+      event.respondWith(
+        caches.match(event.request).then((response) => {
+          return response || fetch(event.request);
+        })
+      );
+    }
   }
 });
 
