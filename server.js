@@ -19,6 +19,9 @@ const whatsappAdapter = require('./messaging/whatsappAdapter');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const GST_RATE = parseFloat(process.env.GST_RATE) || 0.1;
+const SWT_RATE = parseFloat(process.env.SWT_RATE) || 0.02;
+
 // Rate limiting configuration for API endpoints
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -360,6 +363,7 @@ function initDatabase() {
         category TEXT,
         gst REAL DEFAULT 0,
         swt REAL DEFAULT 0,
+        order_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
@@ -414,6 +418,9 @@ function initDatabase() {
       // Ignore if column already exists
     });
     db.run("ALTER TABLE accounting_transactions ADD COLUMN category TEXT", (err) => {
+      // Ignore if column already exists
+    });
+    db.run("ALTER TABLE accounting_transactions ADD COLUMN order_id INTEGER", (err) => {
       // Ignore if column already exists
     });
 
@@ -1091,16 +1098,16 @@ app.put('/api/orders/:id/status', authMiddleware, (req, res) => {
           // 3. Automatically create accounting entry if not already done via payment sync
           const date = new Date().toISOString().split('T')[0];
           const desc = `Completed Order #${orderId} for ${order.customer_name}`;
-          const gst = order.total_price * 0.1; // 10% GST
-          const swt = order.total_price * 0.02; // 2% SWT Simulation
+          const gst = order.total_price * GST_RATE;
+          const swt = order.total_price * SWT_RATE;
 
-          db.get('SELECT id FROM accounting_transactions WHERE description LIKE ?', [`%Order #${orderId}%`], (err, trans) => {
+          db.get('SELECT id FROM accounting_transactions WHERE order_id = ?', [orderId], (err, trans) => {
             if (err) return rollback('Failed to check existing transaction: ' + err.message);
 
             const insertAccounting = (cb) => {
               if (!trans) {
-                db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                  [order.vendor_id, date, 'sale', order.total_price, desc, gst, swt, order.tenant_id], (err) => {
+                db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt, tenant_id, order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                  [order.vendor_id, date, 'sale', order.total_price, desc, gst, swt, order.tenant_id, orderId], (err) => {
                     if (err) return rollback('Failed to record sale: ' + err.message);
                     cb();
                   });
@@ -1464,17 +1471,27 @@ app.post('/api/payments/webhook', (req, res) => {
         const date = new Date().toISOString().split('T')[0];
         const desc = `Payment for Order #${payment.order_id} (Ref: ${transaction_ref})`;
         const amount = payment.amount;
-        const gst = amount * 0.1; // 10% GST
-        const swt = amount * 0.02; // 2% SWT Simulation where applicable
+        const gst = amount * GST_RATE;
+        const swt = amount * SWT_RATE;
 
-        db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [payment.vendor_id, date, 'sale', amount, desc, gst, swt], function(ledgerErr) {
-            if (ledgerErr) {
-              console.error('[LEDGER RECONCILIATION ERROR] Webhook failed to write ledger row:', ledgerErr.message);
-              return res.status(500).json({ error: 'Database transaction ledger write failed.' });
-            }
-            res.json({ message: 'Payment successfully completed and ledger reconciled', payment_id: payment.id });
-          });
+        db.get('SELECT id FROM accounting_transactions WHERE order_id = ?', [payment.order_id], (err, trans) => {
+          if (err) {
+            console.error('[LEDGER CHECK ERROR]', err.message);
+            return res.status(500).json({ error: 'Database ledger check failed.' });
+          }
+          if (trans) {
+            return res.json({ message: 'Payment successfully completed and ledger already reconciled', payment_id: payment.id });
+          }
+
+          db.run('INSERT INTO accounting_transactions (vendor_id, date, type, amount, description, gst, swt, tenant_id, order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [payment.vendor_id, date, 'sale', amount, desc, gst, swt, payment.tenant_id, payment.order_id], function(ledgerErr) {
+              if (ledgerErr) {
+                console.error('[LEDGER RECONCILIATION ERROR] Webhook failed to write ledger row:', ledgerErr.message);
+                return res.status(500).json({ error: 'Database transaction ledger write failed.' });
+              }
+              res.json({ message: 'Payment successfully completed and ledger reconciled', payment_id: payment.id });
+            });
+        });
       });
     } else {
       db.run('UPDATE payments SET status = "failed", provider_txn_id = ? WHERE id = ?', [provider_txn_id || payment.provider_txn_id, payment.id], function(updateErr) {

@@ -1014,11 +1014,8 @@
           name: p.name,
           category: p.category,
           price: parseFloat(p.price),
-          stall: p.vendor_name || 'Unity Stall',
-          rating: 4.5,
-          reviews: Math.floor(Math.random() * 50),
-          image: p.images && p.images.length > 0 ? p.images[0] : 'https://images.unsplash.com/photo-1580915411954-282cb1b0d780?w=400&auto=format',
-          level: 1
+          stall: p.vendor_name || 'Local Store',
+          image: p.images && p.images.length > 0 ? p.images[0] : 'https://images.unsplash.com/photo-1580915411954-282cb1b0d780?w=400&auto=format'
         }));
       } catch (err) {
         console.error('Failed to fetch products:', err);
@@ -1062,16 +1059,10 @@
         <div class="card">
           <div class="card-img-container">
             <img src="${p.image}" class="card-img" alt="${p.name}" loading="lazy">
-            ${p.rating > 4.7 ? '<span class="card-badge">Top Rated</span>' : ''}
           </div>
           <div class="card-content">
             <div class="card-category">${p.category} • ${p.stall}</div>
             <h3 class="card-name">${p.name}</h3>
-            <div class="card-meta">
-              <span>⭐ ${p.rating}</span>
-              <span>(${p.reviews})</span>
-              <span>• L${p.level}</span>
-            </div>
             <div class="card-price">K${p.price.toFixed(2)}</div>
             <div class="card-actions">
               <button class="btn-cart" onclick="addToCart(${p.id})">
