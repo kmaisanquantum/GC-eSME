@@ -164,6 +164,10 @@ This platform supports live payment gateway processing and automated WhatsApp no
 Ensure the following keys are added to your local, untracked `.env` file (never commit actual secrets):
 
 ```env
+# Config-driven Tax & Levy Rates
+GST_RATE=0.1                              # Standard Goods and Services Tax rate (default: 0.1 / 10%)
+SWT_RATE=0.02                             # Salary/Salary-withholding tax or simulated levy rate (default: 0.02 / 2%)
+
 # Mobile-Money Payments Configuration
 PAYMENT_PROVIDER=mock                     # Supported: bsp | micash | cellmoni | mock
 PAYMENT_API_BASE_URL=https://api.bsp.com # Target routing base URL for payment provider
