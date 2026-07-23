@@ -148,6 +148,45 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
+function slugify(text) {
+  if (!text) return 'business';
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+    .replace(/\-\-+/g, '-');        // Replace multiple - with single -
+}
+
+function randomSuffix() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let suffix = '';
+  for (let i = 0; i < 4; i++) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return suffix;
+}
+
+function getUniqueSlug(name, tenantId, callback) {
+  const baseSlug = slugify(name);
+  const suffix = randomSuffix();
+  const slug = `${baseSlug}-${suffix}`;
+
+  // Check uniqueness within the tenant
+  db.get('SELECT id FROM vendors WHERE tenant_id = ? AND slug = ?', [tenantId, slug], (err, row) => {
+    if (err) {
+      return callback(err);
+    }
+    if (row) {
+      // Collision! Try again recursively.
+      return getUniqueSlug(name, tenantId, callback);
+    }
+    // Unique slug found
+    callback(null, slug);
+  });
+}
+
 // Initialize database tables
 function initDatabase() {
   db.serialize(() => {
@@ -200,6 +239,16 @@ function initDatabase() {
         email TEXT,
         social_provider TEXT,
         social_id TEXT,
+        owner_name TEXT,
+        slug TEXT,
+        logo_url TEXT,
+        cover_url TEXT,
+        opening_hours TEXT,
+        landmark TEXT,
+        floor_section TEXT,
+        status TEXT DEFAULT 'draft',
+        onboarding_step INTEGER DEFAULT 0,
+        published_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
@@ -414,6 +463,29 @@ function initDatabase() {
     db.run("ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0", (err) => {
       // Ignore if column already exists
     });
+
+    // Migrations for vendors onboarding columns
+    const vendorColumnsToAlter = [
+      { name: 'owner_name', type: 'TEXT' },
+      { name: 'slug', type: 'TEXT' },
+      { name: 'logo_url', type: 'TEXT' },
+      { name: 'cover_url', type: 'TEXT' },
+      { name: 'opening_hours', type: 'TEXT' },
+      { name: 'landmark', type: 'TEXT' },
+      { name: 'floor_section', type: 'TEXT' },
+      { name: 'status', type: 'TEXT DEFAULT \'draft\'' },
+      { name: 'onboarding_step', type: 'INTEGER DEFAULT 0' },
+      { name: 'published_at', type: 'DATETIME' }
+    ];
+    vendorColumnsToAlter.forEach((col) => {
+      db.run(`ALTER TABLE vendors ADD COLUMN ${col.name} ${col.type}`, (err) => {
+        // Ignore if column already exists
+      });
+    });
+
+    // Idempotent backfill of status and onboarding_step for any pre-existing vendors
+    db.run(`UPDATE vendors SET status = 'draft' WHERE status IS NULL`);
+    db.run(`UPDATE vendors SET onboarding_step = 0 WHERE onboarding_step IS NULL`);
     db.run("ALTER TABLE orders ADD COLUMN cogs REAL DEFAULT 0", (err) => {
       // Ignore if column already exists
     });
@@ -441,6 +513,38 @@ function initDatabase() {
     // Add stock_threshold to products if not exists
     db.run("ALTER TABLE products ADD COLUMN stock_threshold INTEGER DEFAULT 5", (err) => {
         // Ignore error if column already exists
+    });
+
+    // Backfill slugs for any existing vendors lacking one
+    db.all(`SELECT id, name, tenant_id FROM vendors WHERE slug IS NULL OR slug = ''`, [], (err, rows) => {
+      if (err) {
+        console.error('Error querying vendors for slug backfill:', err);
+        return;
+      }
+      if (rows && rows.length > 0) {
+        console.log(`Backfilling slugs for ${rows.length} vendors...`);
+        const updateSlug = (index) => {
+          if (index >= rows.length) {
+            console.log('Slug backfill complete.');
+            return;
+          }
+          const row = rows[index];
+          getUniqueSlug(row.name, row.tenant_id || 1, (err, slug) => {
+            if (err) {
+              console.error(`Error generating slug for vendor ID ${row.id}:`, err);
+              updateSlug(index + 1);
+              return;
+            }
+            db.run(`UPDATE vendors SET slug = ? WHERE id = ?`, [slug, row.id], (updateErr) => {
+              if (updateErr) {
+                console.error(`Error updating slug for vendor ID ${row.id}:`, updateErr);
+              }
+              updateSlug(index + 1);
+            });
+          });
+        };
+        updateSlug(0);
+      }
     });
 
     console.log('Database tables initialized');
@@ -491,13 +595,18 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const tenantId = req.tenantId || 1;
-    const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    db.run(sql, [name, category, phone, location, description, facebook, hashedPassword, email, req.body.loyalty_rate || 1.0, tenantId], function(err) {
+    getUniqueSlug(name, tenantId, (err, slug) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      const token = jwt.sign({ id: this.lastID, role: 'vendor', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
-      res.json({ id: this.lastID, message: 'Vendor registered successfully', token });
+      const sql = 'INSERT INTO vendors (name, category, phone, location, description, facebook, password, email, loyalty_rate, tenant_id, slug, status, onboarding_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+      db.run(sql, [name, category, phone, location, description, facebook, hashedPassword, email, req.body.loyalty_rate || 1.0, tenantId, slug, 'draft', 0], function(err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        const token = jwt.sign({ id: this.lastID, role: 'vendor', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ id: this.lastID, message: 'Vendor registered successfully', token });
+      });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -581,12 +690,15 @@ app.post("/api/auth/social", async (req, res) => {
           // Create new record
           const tenantId = req.tenantId || 1;
           if (role === 'vendor') {
-             const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-             db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', '', tenantId], function(err) {
+             getUniqueSlug(name, tenantId, (err, slug) => {
                if (err) return res.status(500).json({ error: err.message });
-               const vendor = { id: this.lastID, name, email, social_provider: provider, social_id: id, tenant_id: tenantId };
-               const jwtToken = jwt.sign({ id: this.lastID, role: role, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
-               res.json({ message: "Social vendor account created", vendor, token: jwtToken });
+               const sql = "INSERT INTO vendors (name, email, social_provider, social_id, category, location, phone, tenant_id, slug, status, onboarding_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+               db.run(sql, [name, email, provider, id, 'General', 'Garden City SME', '', tenantId, slug, 'draft', 0], function(err) {
+                 if (err) return res.status(500).json({ error: err.message });
+                 const vendor = { id: this.lastID, name, email, social_provider: provider, social_id: id, tenant_id: tenantId, slug, status: 'draft', onboarding_step: 0 };
+                 const jwtToken = jwt.sign({ id: this.lastID, role: role, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
+                 res.json({ message: "Social vendor account created", vendor, token: jwtToken });
+               });
              });
           } else {
              const sql = "INSERT INTO users (name, email, social_provider, social_id) VALUES (?, ?, ?, ?)";
@@ -645,6 +757,84 @@ app.post("/api/auth/customer/login", (req, res) => {
   });
 });
 
+// ============== PUBLIC DISCOVERY ROUTES ==============
+
+// GET /api/businesses (Public discovery list)
+app.get('/api/businesses', (req, res) => {
+  const tenantId = req.tenantId || 1;
+  const sql = `
+    SELECT
+      v.id,
+      v.name,
+      v.slug,
+      v.logo_url,
+      v.category,
+      v.location,
+      v.description,
+      (SELECT COUNT(*) FROM products p WHERE p.vendor_id = v.id AND p.tenant_id = ?) as product_count,
+      (SELECT COUNT(*) FROM services s WHERE s.vendor_id = v.id AND s.tenant_id = ?) as service_count
+    FROM vendors v
+    WHERE v.status = 'published' AND v.tenant_id = ?
+    ORDER BY v.name ASC
+  `;
+  db.all(sql, [tenantId, tenantId, tenantId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// GET /api/businesses/:slug (Single public business profile)
+app.get('/api/businesses/:slug', (req, res) => {
+  const tenantId = req.tenantId || 1;
+  const slug = req.params.slug;
+
+  const vendorSql = `
+    SELECT id, name, slug, logo_url, cover_url, category, phone, email, facebook, location, landmark, floor_section, opening_hours, description
+    FROM vendors
+    WHERE slug = ? AND tenant_id = ? AND status = 'published'
+  `;
+
+  db.get(vendorSql, [slug, tenantId], (err, vendor) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!vendor) return res.status(404).json({ error: 'Business not found or is not published' });
+
+    // Fetch products
+    const productsSql = `
+      SELECT p.*, GROUP_CONCAT(pi.image_url) as images
+      FROM products p
+      LEFT JOIN product_images pi ON p.id = pi.product_id
+      WHERE p.vendor_id = ? AND p.tenant_id = ?
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+    `;
+    db.all(productsSql, [vendor.id, tenantId], (err, productRows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const products = productRows.map(row => ({
+        ...row,
+        images: row.images ? row.images.split(',') : []
+      }));
+
+      // Fetch services
+      const servicesSql = `
+        SELECT *
+        FROM services
+        WHERE vendor_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC
+      `;
+      db.all(servicesSql, [vendor.id, tenantId], (err, services) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json({
+          business: vendor,
+          products: products,
+          services: services
+        });
+      });
+    });
+  });
+});
+
 // ============== VENDOR ROUTES ==============
 
 // Get all vendors
@@ -657,7 +847,7 @@ app.get('/api/vendors', (req, res) => {
 
 // Get vendor by ID with data minimization (safe columns only)
 app.get('/api/vendors/:id', (req, res) => {
-  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [req.params.id, req.tenantId], (err, row) => {
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, owner_name, slug, logo_url, cover_url, opening_hours, landmark, floor_section, status, onboarding_step, published_at, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [req.params.id, req.tenantId], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Vendor not found' });
     res.json(row);
@@ -670,7 +860,7 @@ app.get('/api/vendors/me/:id', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
     return res.status(403).json({ error: 'Forbidden: You can only read your own vendor profile' });
   }
-  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [targetId, req.tenantId], (err, row) => {
+  db.get('SELECT id, name, loyalty_rate, category, phone, location, description, facebook, email, owner_name, slug, logo_url, cover_url, opening_hours, landmark, floor_section, status, onboarding_step, published_at, created_at, updated_at FROM vendors WHERE id = ? AND tenant_id = ?', [targetId, req.tenantId], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Vendor not found' });
     res.json(row);
@@ -688,6 +878,135 @@ app.put('/api/vendors/:id', authMiddleware, (req, res) => {
   db.run(sql, [name, category, phone, location, description, facebook, email, targetId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Vendor updated successfully', changes: this.changes });
+  });
+});
+
+// PATCH /api/vendors/:id/onboarding
+app.patch('/api/vendors/:id/onboarding', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only modify your own vendor profile' });
+  }
+
+  const allowedFields = [
+    'name', 'owner_name', 'category', 'description', 'phone', 'email',
+    'facebook', 'location', 'landmark', 'floor_section', 'opening_hours',
+    'logo_url', 'cover_url', 'onboarding_step'
+  ];
+
+  const updates = [];
+  const params = [];
+
+  allowedFields.forEach(field => {
+    if (req.body[field] !== undefined) {
+      updates.push(`${field} = ?`);
+      if (field === 'opening_hours' && typeof req.body[field] === 'object') {
+        params.push(JSON.stringify(req.body[field]));
+      } else {
+        params.push(req.body[field]);
+      }
+    }
+  });
+
+  updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+  const sql = `UPDATE vendors SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?`;
+  params.push(targetId, req.tenantId);
+
+  db.run(sql, params, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Onboarding progress saved successfully' });
+  });
+});
+
+// POST /api/vendors/:id/publish
+app.post('/api/vendors/:id/publish', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only publish your own profile' });
+  }
+
+  db.get('SELECT name, category, phone FROM vendors WHERE id = ? AND tenant_id = ?', [targetId, req.tenantId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Vendor not found' });
+
+    const missing = [];
+    if (!row.name || row.name.trim() === '') missing.push('business name');
+    if (!row.category || row.category.trim() === '') missing.push('category');
+    if (!row.phone || row.phone.trim() === '') missing.push('contact number (phone)');
+
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: 'Unable to publish. The following required information is missing: ' + missing.join(', ') + '.'
+      });
+    }
+
+    db.run('UPDATE vendors SET status = ?, published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?', ['published', targetId, req.tenantId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Vendor published successfully' });
+    });
+  });
+});
+
+// GET /api/vendors/:id/completion
+app.get('/api/vendors/:id/completion', authMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (req.user.role !== 'admin' && (req.user.role !== 'vendor' || req.user.id !== targetId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only check completion for your own profile' });
+  }
+
+  db.get('SELECT description, logo_url, cover_url, opening_hours FROM vendors WHERE id = ? AND tenant_id = ?', [targetId, req.tenantId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Vendor not found' });
+
+    // Query product count
+    db.get('SELECT COUNT(*) as count FROM products WHERE vendor_id = ?', [targetId], (err, pRow) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      // Query service count
+      db.get('SELECT COUNT(*) as count FROM services WHERE vendor_id = ?', [targetId], (err, sRow) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const missing = [];
+        let score = 0;
+
+        if (row.description && row.description.trim() !== '') {
+          score += 20;
+        } else {
+          missing.push('description');
+        }
+
+        if (row.logo_url && row.logo_url.trim() !== '') {
+          score += 20;
+        } else {
+          missing.push('logo');
+        }
+
+        if (row.cover_url && row.cover_url.trim() !== '') {
+          score += 20;
+        } else {
+          missing.push('photo');
+        }
+
+        const totalItems = (pRow ? pRow.count : 0) + (sRow ? sRow.count : 0);
+        if (totalItems > 0) {
+          score += 20;
+        } else {
+          missing.push('product/service');
+        }
+
+        if (row.opening_hours && row.opening_hours.trim() !== '' && row.opening_hours !== '{}') {
+          score += 20;
+        } else {
+          missing.push('opening hours');
+        }
+
+        res.json({
+          percentage: score,
+          missing: missing
+        });
+      });
+    });
   });
 });
 
@@ -885,7 +1204,7 @@ app.post('/api/products/:id/images', authMiddleware, upload.array('images', 5), 
 
 // Get all products
 app.get('/api/products', (req, res) => {
-  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id LEFT JOIN vendors v ON p.vendor_id = v.id WHERE p.tenant_id = ? GROUP BY p.id ORDER BY p.created_at DESC';
+  const sql = 'SELECT p.*, GROUP_CONCAT(pi.image_url) as images, v.name as vendor_name, v.phone as vendor_phone, v.location as vendor_location, v.slug as vendor_slug FROM products p LEFT JOIN product_images pi ON p.id = pi.product_id LEFT JOIN vendors v ON p.vendor_id = v.id WHERE p.tenant_id = ? GROUP BY p.id ORDER BY p.created_at DESC';
   db.all(sql, [req.tenantId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const products = rows.map(row => ({ ...row, images: row.images ? row.images.split(',') : [] }));
