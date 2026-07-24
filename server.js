@@ -17,6 +17,7 @@ const providerAdapter = require('./payments/providerAdapter');
 const whatsappAdapter = require('./messaging/whatsappAdapter');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 const GST_RATE = parseFloat(process.env.GST_RATE) || 0.1;
