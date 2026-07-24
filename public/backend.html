@@ -7,6 +7,12 @@
   <meta name="theme-color" content="#ca8a04">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Garden City SME | Vendor Dashboard</title>
+
+  <!-- iOS PWA Support -->
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Garden City SME">
   <style>
     @font-face {
       font-family: 'Inter';
@@ -337,6 +343,11 @@
     <a onclick="switchTab('products')" id="m-nav-products" class="nav-link">📦<br>Products</a>
     <a href="/" class="nav-link" style="color: var(--success);">🏠<br>Mall</a>
   </nav>
+
+  <!-- PWA Install Button UI -->
+  <button id="pwa-install-btn" class="hidden" style="position: fixed; bottom: 80px; left: 20px; z-index: 9999; background: var(--primary); color: #000; border: none; border-radius: 50px; padding: 12px 24px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px; cursor: pointer;">
+    <i class="fa-solid fa-download"></i> <span>Install App</span>
+  </button>
 
   <main class="main-content hidden" id="mainContent">
     <div class="header">
@@ -1241,6 +1252,66 @@
           });
       });
     }
+
+    // PWA Install Button Logic
+    (function() {
+      const installBtn = document.getElementById('pwa-install-btn');
+      let deferredPrompt = null;
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (installBtn && !window.matchMedia('(display-mode: standalone)').matches) {
+          installBtn.classList.remove('hidden');
+        }
+      });
+
+      window.addEventListener('appinstalled', () => {
+        if (installBtn) {
+          installBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+        console.log('PWA was installed successfully');
+      });
+
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        if (installBtn) installBtn.classList.add('hidden');
+      }
+
+      if (installBtn) {
+        installBtn.addEventListener('click', () => {
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+          const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+          if (isIOS && !isStandalone) {
+            alert("To install Garden City SME on your iOS device:\n\n1. Tap the Share icon (at the bottom/top of Safari).\n2. Scroll down and tap 'Add to Home Screen'.");
+            return;
+          }
+
+          if (!deferredPrompt) {
+            alert("The install prompt is not available right now. If on desktop, click the install icon in the URL bar.");
+            return;
+          }
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('User accepted the install prompt');
+            } else {
+              console.log('User dismissed the install prompt');
+            }
+            deferredPrompt = null;
+            installBtn.classList.add('hidden');
+          });
+        });
+
+        // Auto-show for iOS Safari if not in standalone display mode
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        if (isIOS && !isStandalone) {
+          installBtn.classList.remove('hidden');
+        }
+      }
+    })();
 
     // Connection and Sync Progress Indicators
     const statusIndicator = document.createElement('div');

@@ -105,6 +105,9 @@ app.use(helmet({
         "'self'",
         "https://accounts.google.com",
         "https://graph.facebook.com"
+      ],
+      manifestSrc: [
+        "'self'"
       ]
     }
   }
