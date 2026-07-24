@@ -1,4 +1,4 @@
-const CACHE_NAME = 'garden-city-sme-v6';
+const CACHE_NAME = 'garden-city-sme-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -8,6 +8,8 @@ const ASSETS_TO_CACHE = [
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-512-maskable.png',
+  '/icons/apple-touch-icon.png',
   '/fonts/inter-400.woff2',
   '/fonts/inter-600.woff2',
   '/fonts/inter-700.woff2',
@@ -15,7 +17,6 @@ const ASSETS_TO_CACHE = [
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://accounts.google.com/gsi/client',
-  'https://connect.facebook.net/en_US/sdk.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2',
@@ -77,7 +78,13 @@ function deleteMutation(id) {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map((url) => {
+          return cache.add(url).catch((err) => {
+            console.warn(`[SW WARNING] Failed to cache asset: ${url}`, err);
+          });
+        })
+      );
     })
   );
   self.skipWaiting();

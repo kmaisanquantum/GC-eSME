@@ -1,7 +1,15 @@
 {
   "name": "Garden City SME Marketplace",
   "short_name": "GC-eSME",
-  "start_url": "/index.html",
+  "description": "Garden City SME Marketplace and Digital Vendor Platform",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "lang": "en",
+  "orientation": "portrait",
+  "categories": [
+    "business",
+    "shopping"
+  ],
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#ca8a04",
@@ -15,6 +23,24 @@
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Browse Marketplace",
+      "url": "/index.html",
+      "description": "View products and shops in the Garden City SME Marketplace"
+    },
+    {
+      "name": "Vendor Dashboard",
+      "url": "/backend.html",
+      "description": "Access your vendor sales, stock, and micro-lending reports"
     }
   ]
 }
