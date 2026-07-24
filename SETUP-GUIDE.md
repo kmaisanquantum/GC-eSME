@@ -81,6 +81,10 @@ DATABASE_FILE=./garden_city.db
 # Must include absolute schemes (http:// or https://) and NO trailing slash.
 # For production fallback, list the tenant domains exactly as shown below:
 ALLOWED_ORIGINS=https://gc.dspng.tech,https://unity.dspng.tech
+
+# Reverse Proxy Trust Setting
+# Note: Express "trust proxy" is set to 1 in server.js to trust the first hop,
+# ensuring the correct client IP is resolved for express-rate-limit.
 ```
 
 ---

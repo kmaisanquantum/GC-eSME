@@ -170,6 +170,10 @@ SWT_RATE=0.02                             # Salary/Salary-withholding tax or sim
 # Production fallback: lists the known tenant domains exactly as shown below:
 ALLOWED_ORIGINS=https://gc.dspng.tech,https://unity.dspng.tech
 
+# Reverse Proxy Trust Setting
+# Note: Express "trust proxy" is set to 1 in server.js to trust the first hop,
+# ensuring the correct client IP is resolved for express-rate-limit.
+
 # Mobile-Money Payments Configuration
 PAYMENT_PROVIDER=mock                     # Supported: bsp | micash | cellmoni | mock
 PAYMENT_API_BASE_URL=https://api.bsp.com # Target routing base URL for payment provider
