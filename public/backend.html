@@ -1280,7 +1280,9 @@
 
       if (installBtn) {
         installBtn.addEventListener('click', () => {
-          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+          const ua = navigator.userAgent;
+          const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+          const isAndroid = /Android/i.test(ua);
           const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
           if (isIOS && !isStandalone) {
@@ -1289,7 +1291,11 @@
           }
 
           if (!deferredPrompt) {
-            alert("The install prompt is not available right now. If on desktop, click the install icon in the URL bar.");
+            if (isAndroid) {
+              alert("Install prompt is not active. The app may already be installed, or you can install it using your browser menu's 'Install app' or 'Add to Home screen' option.");
+            } else {
+              alert("To install, click the install icon in your browser's URL address bar, or use the browser menu and select 'Install' or 'Add to Home screen'.");
+            }
             return;
           }
           deferredPrompt.prompt();
