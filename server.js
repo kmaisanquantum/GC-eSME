@@ -34,7 +34,19 @@ const apiLimiter = rateLimit({
 });
 
 // Dynamic restricted CORS origin configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+const envOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+const defaultOrigins = [
+  'https://gc.dspng.tech',
+  'https://unity.dspng.tech',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002'
+];
+const allowedOrigins = envOrigins.length > 0 ? envOrigins : defaultOrigins;
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
