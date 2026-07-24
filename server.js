@@ -10,6 +10,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('CRITICAL ERROR: JWT_SECRET environment variable is required in production mode!');
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-change-in-production';
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -60,7 +63,51 @@ const corsOptions = {
 
 // Global Middleware Stack
 app.use(helmet({
-  contentSecurityPolicy: false // Disable CSP if frontend and backend are served together and need to load external cdn assets easily
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://accounts.google.com/gsi/client",
+        "https://cdn.jsdelivr.net/npm/chart.js",
+        "https://cdnjs.cloudflare.com",
+        "https://connect.facebook.net"
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://cdnjs.cloudflare.com",
+        "https://accounts.google.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "data:",
+        "https://cdnjs.cloudflare.com"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://images.unsplash.com",
+        "https://*.googleusercontent.com",
+        "https://*.facebook.com",
+        "https://*.fbcdn.net"
+      ],
+      frameSrc: [
+        "'self'",
+        "https://accounts.google.com",
+        "https://www.facebook.com",
+        "https://web.facebook.com",
+        "https://connect.facebook.net"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://accounts.google.com",
+        "https://graph.facebook.com"
+      ]
+    }
+  }
 }));
 app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
@@ -362,24 +409,32 @@ function initDatabase() {
     `);
 
     // Create default admin if not exists with hashed password and env overrides
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-    db.get('SELECT * FROM admins WHERE username = ?', [adminUsername], async (err, row) => {
-      if (!row) {
-        try {
-          const hashedPassword = await bcrypt.hash(adminPassword, 10);
-          db.run('INSERT INTO admins (username, password) VALUES (?, ?)', [adminUsername, hashedPassword], (insertErr) => {
-            if (insertErr) {
-              console.error('Error inserting admin user during database init:', insertErr);
-            } else {
-              console.log(`Default admin user '${adminUsername}' created successfully.`);
-            }
-          });
-        } catch (hashErr) {
-          console.error('Error hashing default admin password:', hashErr);
+    let shouldSeedAdmin = true;
+    if (process.env.NODE_ENV === 'production' && (!process.env.ADMIN_PASSWORD || !process.env.ADMIN_USERNAME)) {
+      console.warn('WARNING: Missing ADMIN_USERNAME or ADMIN_PASSWORD environment variable in production mode. Skipping default admin seeding.');
+      shouldSeedAdmin = false;
+    }
+
+    if (shouldSeedAdmin) {
+      const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+      const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+      db.get('SELECT * FROM admins WHERE username = ?', [adminUsername], async (err, row) => {
+        if (!row) {
+          try {
+            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            db.run('INSERT INTO admins (username, password) VALUES (?, ?)', [adminUsername, hashedPassword], (insertErr) => {
+              if (insertErr) {
+                console.error('Error inserting admin user during database init:', insertErr);
+              } else {
+                console.log(`Default admin user '${adminUsername}' created successfully.`);
+              }
+            });
+          } catch (hashErr) {
+            console.error('Error hashing default admin password:', hashErr);
+          }
         }
-      }
-    });
+      });
+    }
 
     // Customer CRM Table
     db.run(`
@@ -574,7 +629,20 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG and WEBP images are allowed'));
+    }
+  }
+});
 
 // JWT Authentication Middleware
 function authMiddleware(req, res, next) {
@@ -1518,7 +1586,7 @@ app.use('/api/admin', (req, res, next) => {
     return next();
   }
   authMiddleware(req, res, () => {
-    if (req.user && req.user.role === 'admin') {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'platform_admin' || req.user.role === 'super_admin')) {
       next();
     } else {
       res.status(403).json({ error: 'Forbidden: Admin access required' });
@@ -1546,14 +1614,38 @@ app.post('/api/admin/login', (req, res) => {
 // Admin Stats
 app.get('/api/admin/stats', (req, res) => {
   const stats = {};
-  db.get('SELECT COUNT(*) as count FROM vendors', [], (err, row) => {
-    stats.totalVendors = row.count;
-    db.get('SELECT COUNT(*) as count FROM products', [], (err, row) => {
-      stats.totalProducts = row.count;
-      db.get('SELECT COUNT(*) as count FROM orders', [], (err, row) => {
-        stats.totalOrders = row.count;
-        db.get('SELECT SUM(total_price) as total FROM orders WHERE status = "completed"', [], (err, row) => {
-          stats.totalRevenue = row.total || 0;
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const tenantId = req.tenantId;
+
+  const vendorSql = isSuperAdmin ? 'SELECT COUNT(*) as count FROM vendors' : 'SELECT COUNT(*) as count FROM vendors WHERE tenant_id = ?';
+  const vendorParams = isSuperAdmin ? [] : [tenantId];
+
+  db.get(vendorSql, vendorParams, (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    stats.totalVendors = (row && row.count) || 0;
+
+    const productSql = isSuperAdmin ? 'SELECT COUNT(*) as count FROM products' : 'SELECT COUNT(*) as count FROM products WHERE tenant_id = ?';
+    const productParams = isSuperAdmin ? [] : [tenantId];
+
+    db.get(productSql, productParams, (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      stats.totalProducts = (row && row.count) || 0;
+
+      const orderSql = isSuperAdmin ? 'SELECT COUNT(*) as count FROM orders' : 'SELECT COUNT(*) as count FROM orders WHERE tenant_id = ?';
+      const orderParams = isSuperAdmin ? [] : [tenantId];
+
+      db.get(orderSql, orderParams, (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        stats.totalOrders = (row && row.count) || 0;
+
+        const revSql = isSuperAdmin
+          ? 'SELECT SUM(total_price) as total FROM orders WHERE status = ?'
+          : 'SELECT SUM(total_price) as total FROM orders WHERE status = ? AND tenant_id = ?';
+        const revParams = isSuperAdmin ? ['completed'] : ['completed', tenantId];
+
+        db.get(revSql, revParams, (err, row) => {
+          if (err) return res.status(500).json({ error: err.message });
+          stats.totalRevenue = (row && row.total) || 0;
           res.json(stats);
         });
       });
@@ -1563,50 +1655,90 @@ app.get('/api/admin/stats', (req, res) => {
 
 // Admin Vendors Management
 app.get('/api/admin/vendors', (req, res) => {
-  db.all('SELECT * FROM vendors ORDER BY created_at DESC', [], (err, rows) => {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'SELECT * FROM vendors ORDER BY created_at DESC'
+    : 'SELECT * FROM vendors WHERE tenant_id = ? ORDER BY created_at DESC';
+  const params = isSuperAdmin ? [] : [req.tenantId];
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // Admin Products Management
 app.get('/api/admin/products', (req, res) => {
-  const sql = 'SELECT p.*, v.name as vendor_name FROM products p LEFT JOIN vendors v ON p.vendor_id = v.id ORDER BY p.created_at DESC';
-  db.all(sql, [], (err, rows) => {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'SELECT p.*, v.name as vendor_name FROM products p LEFT JOIN vendors v ON p.vendor_id = v.id ORDER BY p.created_at DESC'
+    : 'SELECT p.*, v.name as vendor_name FROM products p LEFT JOIN vendors v ON p.vendor_id = v.id WHERE p.tenant_id = ? ORDER BY p.created_at DESC';
+  const params = isSuperAdmin ? [] : [req.tenantId];
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // Admin Orders Management
 app.get('/api/admin/orders', (req, res) => {
-  const sql = 'SELECT o.*, v.name as vendor_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.id ORDER BY o.created_at DESC';
-  db.all(sql, [], (err, rows) => {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'SELECT o.*, v.name as vendor_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.id ORDER BY o.created_at DESC'
+    : 'SELECT o.*, v.name as vendor_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.id WHERE o.tenant_id = ? ORDER BY o.created_at DESC';
+  const params = isSuperAdmin ? [] : [req.tenantId];
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // Admin Delete Vendor
 app.delete('/api/admin/vendors/:id', (req, res) => {
-  db.run('DELETE FROM vendors WHERE id = ?', [req.params.id], function(err) {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'DELETE FROM vendors WHERE id = ?'
+    : 'DELETE FROM vendors WHERE id = ? AND tenant_id = ?';
+  const params = isSuperAdmin ? [req.params.id] : [req.params.id, req.tenantId];
+
+  db.run(sql, params, function(err) {
     if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
     res.json({ message: 'Vendor deleted successfully' });
   });
 });
 
 // Admin Delete Product
 app.delete('/api/admin/products/:id', (req, res) => {
-  db.run('DELETE FROM products WHERE id = ?', [req.params.id], function(err) {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'DELETE FROM products WHERE id = ?'
+    : 'DELETE FROM products WHERE id = ? AND tenant_id = ?';
+  const params = isSuperAdmin ? [req.params.id] : [req.params.id, req.tenantId];
+
+  db.run(sql, params, function(err) {
     if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
     res.json({ message: 'Product deleted successfully' });
   });
 });
 
 // Admin Delete Order
 app.delete('/api/admin/orders/:id', (req, res) => {
-  db.run('DELETE FROM orders WHERE id = ?', [req.params.id], function(err) {
+  const isSuperAdmin = req.user && (req.user.role === 'platform_admin' || req.user.role === 'super_admin');
+  const sql = isSuperAdmin
+    ? 'DELETE FROM orders WHERE id = ?'
+    : 'DELETE FROM orders WHERE id = ? AND tenant_id = ?';
+  const params = isSuperAdmin ? [req.params.id] : [req.params.id, req.tenantId];
+
+  db.run(sql, params, function(err) {
     if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
     res.json({ message: 'Order deleted successfully' });
   });
 });
@@ -2016,15 +2148,34 @@ app.all('/api/*', (req, res) => {
 // Global JSON-returning error handling middleware
 app.use((err, req, res, next) => {
   console.error('[GLOBAL ERROR HANDLER]', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error'
+
+  let statusCode = err.status || 500;
+  let message = err.message || 'Internal Server Error';
+
+  if (err instanceof multer.MulterError) {
+    statusCode = 400;
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      message = 'File size limit exceeded. Max limit is 5MB.';
+    } else {
+      message = err.message;
+    }
+  } else if (err.message && err.message.includes('Only JPEG, PNG and WEBP images are allowed')) {
+    statusCode = 400;
+  }
+
+  res.status(statusCode).json({
+    error: message
   });
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Garden City SME API running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Garden City SME API running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
 
 // Graceful shutdown
 process.on('SIGINT', () => {
