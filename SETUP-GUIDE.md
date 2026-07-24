@@ -76,6 +76,11 @@ garden-city-fullstack/
 PORT=3000
 NODE_ENV=development
 DATABASE_FILE=./garden_city.db
+
+# Allowed CORS Origins Configuration
+# Must include absolute schemes (http:// or https://) and NO trailing slash.
+# For production fallback, list the tenant domains exactly as shown below:
+ALLOWED_ORIGINS=https://gc.dspng.tech,https://unity.dspng.tech
 ```
 
 ---

@@ -165,6 +165,11 @@ Ensure the following keys are added to your local, untracked `.env` file (never 
 GST_RATE=0.1                              # Standard Goods and Services Tax rate (default: 0.1 / 10%)
 SWT_RATE=0.02                             # Salary/Salary-withholding tax or simulated levy rate (default: 0.02 / 2%)
 
+# Allowed CORS Origins Configuration
+# Must include absolute schemes (http:// or https://) and NO trailing slash.
+# Production fallback: lists the known tenant domains exactly as shown below:
+ALLOWED_ORIGINS=https://gc.dspng.tech,https://unity.dspng.tech
+
 # Mobile-Money Payments Configuration
 PAYMENT_PROVIDER=mock                     # Supported: bsp | micash | cellmoni | mock
 PAYMENT_API_BASE_URL=https://api.bsp.com # Target routing base URL for payment provider
