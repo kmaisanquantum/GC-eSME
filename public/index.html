@@ -1029,6 +1029,7 @@
         }));
       } catch (err) {
         console.error('Failed to fetch products:', err);
+        showNotification(`Error: ${err.message || 'Failed to fetch products directory'}`);
       }
     }
 
