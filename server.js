@@ -192,6 +192,16 @@ app.get('/api/tenant/branding', (req, res) => {
   });
 });
 
+// Route for Obfuscated Admin Portal
+app.get('/@dm1n', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/admin.html'));
+});
+
+// Block direct access to admin.html
+app.get('/admin.html', (req, res) => {
+  res.status(404).send('Not Found');
+});
+
 app.use('/uploads', express.static('uploads'));
 app.use(express.static('public', { dotfiles: 'allow' }));
 
@@ -440,6 +450,22 @@ function initDatabase() {
             });
           } catch (hashErr) {
             console.error('Error hashing default admin password:', hashErr);
+          }
+        } else {
+          // One-time safe reconciliation: update password hash if it is configured
+          if (process.env.ADMIN_PASSWORD) {
+            try {
+              const hashedPassword = await bcrypt.hash(adminPassword, 10);
+              db.run('UPDATE admins SET password = ? WHERE id = ?', [hashedPassword, row.id], (updateErr) => {
+                if (updateErr) {
+                  console.error('Error reconciling admin user password:', updateErr);
+                } else {
+                  console.log(`Admin user '${adminUsername}' password successfully reconciled/updated on startup.`);
+                }
+              });
+            } catch (hashErr) {
+              console.error('Error hashing reconciled admin password:', hashErr);
+            }
           }
         }
       });
