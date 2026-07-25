@@ -656,6 +656,61 @@ function initDatabase() {
       }
     });
 
+    // Idempotent seeding of default vendors and products if the database is empty (except in test mode)
+    if (process.env.NODE_ENV !== 'test') {
+      db.get('SELECT COUNT(*) as count FROM vendors', [], (err, row) => {
+        if (!err && row && row.count === 0) {
+          console.log('Database is empty. Seeding default vendors and products...');
+
+          // Seed Vendor for Tenant 1
+          db.run(
+            "INSERT INTO vendors (name, category, phone, location, status, tenant_id, slug, onboarding_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ["Garden City Local Shop", "General", "+675 7000 0000", "Garden City, Port Moresby", "published", 1, "garden-city-shop", 3],
+            function(vendor1Err) {
+              if (vendor1Err) {
+                console.error('Error seeding default vendor 1:', vendor1Err.message);
+                return;
+              }
+              const vendor1Id = this.lastID;
+
+              // Seed products for Vendor 1
+              db.run(
+                "INSERT INTO products (tenant_id, vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [1, vendor1Id, "Fresh Organic PNG Coffee", "Catering", 15.0, 100, "Highlands premium single-origin coffee beans.", "active"]
+              );
+              db.run(
+                "INSERT INTO products (tenant_id, vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [1, vendor1Id, "Handwoven Bilum Bag", "Fashion", 45.0, 50, "Beautiful and durable traditional handwoven PNG bilum.", "active"]
+              );
+            }
+          );
+
+          // Seed Vendor for Tenant 2
+          db.run(
+            "INSERT INTO vendors (name, category, phone, location, status, tenant_id, slug, onboarding_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ["Unity Mall General Store", "General", "+675 7000 0001", "Unity Mall, Port Moresby", "published", 2, "unity-mall-store", 3],
+            function(vendor2Err) {
+              if (vendor2Err) {
+                console.error('Error seeding default vendor 2:', vendor2Err.message);
+                return;
+              }
+              const vendor2Id = this.lastID;
+
+              // Seed products for Vendor 2
+              db.run(
+                "INSERT INTO products (tenant_id, vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [2, vendor2Id, "Unity Traditional Woodcraft", "Home & Living", 60.0, 20, "Hand-carved wooden sculptures from local artisans.", "active"]
+              );
+              db.run(
+                "INSERT INTO products (tenant_id, vendor_id, name, category, price, stock, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [2, vendor2Id, "Highland Honey Jar", "Catering", 25.0, 100, "100% pure organic wild honey from the PNG highlands.", "active"]
+              );
+            }
+          );
+        }
+      });
+    }
+
     console.log('Database tables initialized');
   });
 }
