@@ -1,4 +1,6 @@
 // PWA Install and Fallback Logic for Garden City SME
+// Note: Web browsers cannot silently auto-download and install a web application.
+// The native browser-controlled install prompt (via beforeinstallprompt) is the only supported one-tap path.
 (function() {
   window.addEventListener('DOMContentLoaded', () => {
     const installBtn = document.getElementById('pwa-install-btn');
@@ -48,20 +50,18 @@
         return;
       }
 
-      // No native prompt available fallback
+      // No native prompt available fallback (no APK reference)
       if (!deferredPrompt) {
         if (isFirefox) {
           if (isAndroid) {
-            alert("To install Garden City SME on Firefox for Android:\n\n1. Open the browser menu (three dots ⋮ icon next to the address bar).\n2. Tap 'Install' or 'Add to Home screen'.\n\nFor the best app experience, you can also open this website in Google Chrome to install it with one click, or download the direct Android installer (APK) from our site.");
+            alert("To install Garden City SME on Firefox for Android:\n\n1. Open the browser menu (three dots ⋮ icon next to the address bar).\n2. Tap 'Install' or 'Add to Home screen'.\n\nFor the best experience, you can also open this website in Google Chrome to install it with one-click.");
           } else {
-            if (confirm("Firefox on desktop does not support installing Progressive Web Apps (PWAs) natively.\n\nTo install the app, we recommend opening this website in Google Chrome, Microsoft Edge, or Safari.\n\nWould you like to download our direct Android installer (APK) instead?")) {
-              window.location.href = "/downloads/garden-city-sme.apk";
-            }
+            alert("Firefox on desktop does not support installing Progressive Web Apps (PWAs) natively.\n\nTo install the app, we recommend opening this website in Google Chrome, Microsoft Edge, or Safari.");
           }
         } else if (isSamsung) {
           alert("To install using Samsung Internet:\n\n1. Tap the menu icon (three horizontal lines ☰ at the bottom right).\n2. Tap 'Add page to' -> 'Home screen', or tap the Install (+) icon in the address bar.");
         } else if (isAndroid) {
-          alert("To install Garden City SME on your Android device:\n\n1. Open your browser menu (usually three dots ⋮ at the top right).\n2. Tap 'Install app' or 'Add to Home screen'.\n\nAlternatively, you can download the direct Android installer (APK) from our site.");
+          alert("To install Garden City SME on your Android device:\n\n1. Open your browser menu (usually three dots ⋮ at the top right).\n2. Tap 'Install app' or 'Add to Home screen'.");
         } else {
           alert("To install Garden City SME:\n\nClick the install icon in your browser's address bar (URL bar), or open the browser menu and select 'Install' or 'Add to Home screen'.");
         }

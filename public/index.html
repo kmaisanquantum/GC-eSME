@@ -163,20 +163,6 @@
 
     .auth-btn:hover { background: var(--primary-hover); }
 
-    .info-bar {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border);
-      padding: 6px 16px;
-      text-align: center;
-      font-size: 11px;
-    }
-
-    .info-bar a {
-      color: var(--text-accent);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
     .hero-slider {
       position: relative;
       height: 200px;
@@ -650,25 +636,16 @@
         padding: 0.4rem 0.6rem;
         font-size: 0.75rem;
       }
-      #langToggle {
-        margin: 0 4px !important;
-        font-size: 0.7rem !important;
-        padding: 2px 6px !important;
-      }
     }
   </style>
 </head>
 <body>
 
-  <div class="info-bar">
-    A product of <a href="https://www.dspng.tech" target="_blank">Deeps Systems</a>. Supporting Local SMEs in PNG.
-  </div>
-
   <header class="header">
     <a href="#" class="logo-container" onclick="switchScreen('directory')">
       <h1>Garden City SME</h1>
     </a>
-    <div class="header-actions"><button id="langToggle" onclick="toggleLanguage()" class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: var(--text-accent); margin: 0 10px;">🇵🇳 Tok Pisin</button>
+    <div class="header-actions">
       <button class="cart-trigger" onclick="toggleCart()">
         🛒 <span class="cart-count" id="cartCount">0</span>
       </button>
@@ -925,12 +902,24 @@
     <i class="fa-solid fa-download"></i> <span>Install App</span>
   </button>
 
-  <!-- PWA APK Download Button (Shareable Installer) -->
-  <a href="/downloads/garden-city-sme.apk" id="pwa-apk-btn" style="position: fixed; bottom: 140px; left: 20px; z-index: 9999; background: #10b981; color: #fff; text-decoration: none; border-radius: 50px; padding: 12px 24px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px; cursor: pointer;">
-    <i class="fa-brands fa-android"></i> <span>Download Android App</span>
-  </a>
-
   <script>
+    // Global fetch interceptor to append authorization token automatically
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(url, options = {}) {
+        const token = localStorage.getItem('um_token');
+        if (token && url.toString().includes('/api/')) {
+          options.headers = options.headers || {};
+          if (!(options.headers instanceof Headers)) {
+            options.headers['Authorization'] = `Bearer ${token}`;
+          } else {
+            options.headers.set('Authorization', `Bearer ${token}`);
+          }
+        }
+        return originalFetch(url, options);
+      };
+    })();
+
     const categories = ['All', 'Fashion', 'Catering', 'Tech', 'Beauty', 'Home & Living', 'Sports', 'Accessories'];
     let products = [];
     let currentCategory = 'All';
@@ -1007,12 +996,6 @@
 
             const wifiHeader = document.querySelector('#wifi h2');
             if (wifiHeader) wifiHeader.textContent = `${b.appName} Wi-Fi`;
-
-            // Dynamically translate or update welcome keys if translated
-            if (translations && translations.en) {
-              translations.en.welcome = `Welcome to ${b.appName}`;
-              applyTranslations();
-            }
           }
         }
       } catch (err) {
@@ -1218,6 +1201,7 @@
         if (data.error) throw new Error(data.error);
 
         localStorage.setItem('um_user', JSON.stringify(data.user));
+        localStorage.setItem('um_token', data.token);
         alert('Login successful!');
         closeAuthModal();
         checkUserSession();
@@ -1521,27 +1505,6 @@
       updateNetworkStatus();
     }
 
-
-    const translations = {"en":{"shop":"Shop","sell":"Sell","wifi":"Wi-Fi","accounts":"Accounts","revenue":"Revenue","expenses":"Expenses","profit":"Estimated Profit","manage_transactions":"Manage Transactions","cart":"Your Shopping Cart","checkout":"Complete Your Order","dashboard":"Vendor Dashboard","products":"Products","orders":"Orders","settings":"Settings","accounting":"Accounting","sign_out":"Sign Out","welcome":"Welcome to Garden City SME","low_stock":"Low Stock Alert"},"tp":{"shop":"Stoa","sell":"Salim","wifi":"Wai-Fai","accounts":"Buk Kibing","revenue":"Mani i kam insait","expenses":"Mani i go ausait","profit":"Seken mani","manage_transactions":"Lukautim mani","cart":"Beg bilong yu","checkout":"Baim olgeta","dashboard":"Dasbot bilong yu","products":"Ol samting","orders":"Ol oda","settings":"Seting","accounting":"Buk Kibing","sign_out":"Givim ap","welcome":"Wanbel long Garden City SME","low_stock":"Sot long ol samting"}};
-    let currentLang = localStorage.getItem('um_lang') || 'en';
-
-    function toggleLanguage() {
-      currentLang = currentLang === 'en' ? 'tp' : 'en';
-      localStorage.setItem('um_lang', currentLang);
-      applyTranslations();
-    }
-
-    function applyTranslations() {
-      const t = translations[currentLang];
-      document.querySelectorAll('[data-t]').forEach(el => {
-        const key = el.getAttribute('data-t');
-        if (t[key]) el.textContent = t[key];
-      });
-      const toggleBtn = document.getElementById('langToggle');
-      if (toggleBtn) toggleBtn.textContent = currentLang === 'en' ? '🇵🇳 Tok Pisin' : '🇬🇧 English';
-    }
-
-    applyTranslations();
     init();
   </script>
   <footer id="contact-footer" class="app-footer">

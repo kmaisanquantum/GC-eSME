@@ -352,11 +352,6 @@
     <i class="fa-solid fa-download"></i> <span>Install App</span>
   </button>
 
-  <!-- PWA APK Download Button (Shareable Installer) -->
-  <a href="/downloads/garden-city-sme.apk" id="pwa-apk-btn" style="position: fixed; bottom: 140px; left: 20px; z-index: 9999; background: #10b981; color: #fff; text-decoration: none; border-radius: 50px; padding: 12px 24px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px; cursor: pointer;">
-    <i class="fa-brands fa-android"></i> <span>Download Android App</span>
-  </a>
-
   <main class="main-content hidden" id="mainContent">
     <div class="header">
       <h2>Welcome back, <span style="color: var(--text-accent);" id="vendorStoreName">Store Name</span></h2>
@@ -672,6 +667,22 @@
   </main>
 
   <script>
+    // Global fetch interceptor to append authorization token automatically
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(url, options = {}) {
+        const token = localStorage.getItem('um_vendor_token');
+        if (token && url.toString().includes('/api/')) {
+          options.headers = options.headers || {};
+          if (!(options.headers instanceof Headers)) {
+            options.headers['Authorization'] = `Bearer ${token}`;
+          } else {
+            options.headers.set('Authorization', `Bearer ${token}`);
+          }
+        }
+        return originalFetch(url, options);
+      };
+    })();
 
     function handleGoogleCallback(response) {
       const payload = JSON.parse(atob(response.credential.split('.')[1]));
@@ -962,6 +973,7 @@
         if (data.error) throw new Error(data.error);
 
         localStorage.setItem('um_vendor', JSON.stringify(data.vendor));
+        localStorage.setItem('um_vendor_token', data.token);
         currentVendor = data.vendor;
         showDashboard();
       } catch (err) {
