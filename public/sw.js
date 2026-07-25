@@ -3,7 +3,7 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/backend.html',
-  '/admin.html',
+  '/@dm1n',
   '/garden-city.jpg',
   '/manifest.json',
   '/icons/icon-192.png',
