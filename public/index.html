@@ -861,10 +861,6 @@
 
           <div class="social-btns">
             <div id="g_id_signin"></div>
-            <button class="social-btn facebook-btn" onclick="socialLogin('facebook')">
-              <svg style="width:18px;height:18px" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96A10 10 0 0 0 22 12.06C22 6.53 17.5 2.04 12 2.04Z" /></svg>
-              Continue with Facebook
-            </button>
           </div>
 
           <p id="authToggleMsg" style="text-align: center; margin-top: 1.5rem; font-size: 0.875rem; color: var(--text-muted);">
@@ -1187,54 +1183,99 @@
 
     function closeAuthModal() { document.getElementById('authModal').classList.remove('show'); }
 
-    document.getElementById('loginForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
+    function bindAuthAndCheckoutForms() {
+      const loginForm = document.getElementById('loginForm');
+      if (loginForm) {
+        loginForm.onsubmit = async (e) => {
+          e.preventDefault();
+          const email = document.getElementById('loginEmail').value;
+          const password = document.getElementById('loginPassword').value;
 
-      try {
-        const res = await fetch('/api/auth/customer/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        const data = await safeParseJSON(res, 'Login failed');
-        if (data.error) throw new Error(data.error);
+          try {
+            const res = await fetch('/api/auth/customer/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password })
+            });
+            const data = await safeParseJSON(res, 'Login failed');
+            if (data.error) throw new Error(data.error);
 
-        localStorage.setItem('um_user', JSON.stringify(data.user));
-        localStorage.setItem('um_token', data.token);
-        alert('Login successful!');
-        closeAuthModal();
-        checkUserSession();
-      } catch (err) {
-        alert(err.message);
+            localStorage.setItem('um_user', JSON.stringify(data.user));
+            localStorage.setItem('um_token', data.token);
+            alert('Login successful!');
+            closeAuthModal();
+            checkUserSession();
+          } catch (err) {
+            alert(err.message);
+          }
+        };
       }
-    };
 
-    document.getElementById('registerForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const payload = {
-        name: document.getElementById('regName').value,
-        email: document.getElementById('regEmail').value,
-        phone: document.getElementById('regPhone').value,
-        password: document.getElementById('regPassword').value
-      };
+      const registerForm = document.getElementById('registerForm');
+      if (registerForm) {
+        registerForm.onsubmit = async (e) => {
+          e.preventDefault();
+          const payload = {
+            name: document.getElementById('regName').value,
+            email: document.getElementById('regEmail').value,
+            phone: document.getElementById('regPhone').value,
+            password: document.getElementById('regPassword').value
+          };
 
-      try {
-        const res = await fetch('/api/auth/customer/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await safeParseJSON(res, 'Registration failed');
-        if (data.error) throw new Error(data.error);
+          try {
+            const res = await fetch('/api/auth/customer/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await safeParseJSON(res, 'Registration failed');
+            if (data.error) throw new Error(data.error);
 
-        alert('Registration successful! Please sign in.');
-        setAuthMode('login');
-      } catch (err) {
-        alert(err.message);
+            alert('Registration successful! Please sign in.');
+            setAuthMode('login');
+          } catch (err) {
+            alert(err.message);
+          }
+        };
       }
-    };
+
+      const checkoutForm = document.getElementById('checkoutForm');
+      if (checkoutForm) {
+        checkoutForm.onsubmit = async (e) => {
+          e.preventDefault();
+          const name = document.getElementById('custName').value;
+          const phone = document.getElementById('custPhone').value;
+          const vendorIds = [...new Set(cart.map(item => item.vendor_id))];
+          try {
+            for (const vId of vendorIds) {
+              const vendorItems = cart.filter(item => item.vendor_id === vId);
+              const total = vendorItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+              const res = await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  vendor_id: vId,
+                  customer_name: name,
+                  customer_phone: phone,
+                  items: vendorItems,
+                  total_price: total
+                })
+              });
+              await safeParseJSON(res, 'Failed to place order');
+            }
+            alert('Order placed successfully! Vendors will contact you via WhatsApp.');
+            cart = [];
+            saveCart();
+            updateCartUI();
+            updateAccountingUI();
+            closeCheckoutModal();
+            if (document.getElementById('cartModal').classList.contains('show')) toggleCart();
+          } catch (err) {
+            alert('Failed to place order: ' + err.message);
+          }
+        };
+      }
+    }
 
 
     async function updateLoyaltyDisplay() {
@@ -1281,39 +1322,6 @@
       document.getElementById('checkoutModal').classList.remove('show');
     }
 
-    document.getElementById('checkoutForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('custName').value;
-      const phone = document.getElementById('custPhone').value;
-      const vendorIds = [...new Set(cart.map(item => item.vendor_id))];
-      try {
-        for (const vId of vendorIds) {
-          const vendorItems = cart.filter(item => item.vendor_id === vId);
-          const total = vendorItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-          const res = await fetch('/api/orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vendor_id: vId,
-              customer_name: name,
-              customer_phone: phone,
-              items: vendorItems,
-              total_price: total
-            })
-          });
-          await safeParseJSON(res, 'Failed to place order');
-        }
-        alert('Order placed successfully! Vendors will contact you via WhatsApp.');
-        cart = [];
-        saveCart();
-        updateCartUI();
-        updateAccountingUI();
-        closeCheckoutModal();
-        if (document.getElementById('cartModal').classList.contains('show')) toggleCart();
-      } catch (err) {
-        alert('Failed to place order: ' + err.message);
-      }
-    };
 
     function showNotification(msg) {
       const toast = document.createElement('div');
@@ -1351,11 +1359,12 @@
       document.getElementById('accProfit').textContent = `K${(sales - exp).toFixed(2)}`;
     }
 
-    checkUserSession();
     // Customer Session Management
     function checkUserSession() {
       const user = JSON.parse(localStorage.getItem('um_user'));
       const headerActions = document.querySelector('.header-actions');
+      if (!headerActions) return;
+
       const signInBtn = headerActions.querySelector('button[onclick="openAuthModal(\'login\')"]');
       const signUpBtn = headerActions.querySelector('button[onclick="openAuthModal(\'register\')"]');
 
@@ -1371,7 +1380,8 @@
            profileBtn.style.background = 'transparent';
            profileBtn.style.border = '1px solid var(--text-accent)';
            profileBtn.style.color = 'var(--text-accent)';
-           profileBtn.innerHTML = `👤 ${user.name.split(' ')[0]}`;
+           const firstName = user.name ? user.name.split(' ')[0] : 'User';
+           profileBtn.innerHTML = `👤 ${firstName}`;
            profileBtn.onclick = () => {
              if (confirm('Sign out?')) {
                localStorage.removeItem('um_user');
@@ -1382,15 +1392,6 @@
         }
       }
     }
-
-    window.fbAsyncInit = function() {
-      FB.init({
-        appId      : 'your-facebook-app-id', // Replaced dynamically or from config
-        cookie     : true,
-        xfbml      : true,
-        version    : 'v18.0'
-      });
-    };
 
 
     function handleGoogleCallback(response) {
@@ -1405,20 +1406,11 @@
 
     async function socialLogin(provider) {
       if (provider === 'google') {
+        if (!window.google || !window.google.accounts) {
+          alert("Google Sign-In is currently unavailable offline or blocked.");
+          return;
+        }
         window.google.accounts.id.prompt();
-      } else if (provider === 'facebook') {
-        FB.login(function(response) {
-          if (response.authResponse) {
-            FB.api('/me', {fields: 'name,email'}, function(userData) {
-              handleSocialAuth(provider, {
-                name: userData.name,
-                email: userData.email,
-                id: userData.id,
-                token: response.authResponse.accessToken
-              });
-            });
-          }
-        }, {scope: 'public_profile,email'});
       }
     }
 
