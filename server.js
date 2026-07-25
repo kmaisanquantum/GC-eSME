@@ -193,7 +193,13 @@ app.get('/api/tenant/branding', (req, res) => {
 });
 
 app.use('/uploads', express.static('uploads'));
-app.use(express.static('public'));
+app.use(express.static('public', { dotfiles: 'allow' }));
+
+// Custom Route for APK Downloads
+app.get('/downloads/garden-city-sme.apk', (req, res) => {
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.sendFile(path.join(__dirname, 'public/downloads/garden-city-sme.apk'));
+});
 
 // Create uploads directory
 if (!fs.existsSync('uploads')) {
