@@ -16,6 +16,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Garden City SME">
 
+  <!-- PWA Install shared JS helper -->
+  <script src="/js/pwa-install.js" defer></script>
+
   <!-- Open Graph Meta Tags (for WhatsApp/email previews) -->
   <!-- Note: PWAs cannot be distributed as raw file downloads; URL sharing + install prompts is the native web route. -->
   <meta property="og:title" content="Garden City SME Marketplace">
@@ -922,6 +925,11 @@
     <i class="fa-solid fa-download"></i> <span>Install App</span>
   </button>
 
+  <!-- PWA APK Download Button (Shareable Installer) -->
+  <a href="/downloads/garden-city-sme.apk" id="pwa-apk-btn" style="position: fixed; bottom: 140px; left: 20px; z-index: 9999; background: #10b981; color: #fff; text-decoration: none; border-radius: 50px; padding: 12px 24px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px; cursor: pointer;">
+    <i class="fa-brands fa-android"></i> <span>Download Android App</span>
+  </a>
+
   <script>
     const categories = ['All', 'Fashion', 'Catering', 'Tech', 'Beauty', 'Home & Living', 'Sports', 'Accessories'];
     let products = [];
@@ -1464,71 +1472,6 @@
       });
     }
 
-    // PWA Install Button Logic
-    (function() {
-      const installBtn = document.getElementById('pwa-install-btn');
-      let deferredPrompt = null;
-
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        if (installBtn && !window.matchMedia('(display-mode: standalone)').matches) {
-          installBtn.classList.remove('hidden');
-        }
-      });
-
-      window.addEventListener('appinstalled', () => {
-        if (installBtn) {
-          installBtn.classList.add('hidden');
-        }
-        deferredPrompt = null;
-        console.log('PWA was installed successfully');
-      });
-
-      if (window.matchMedia('(display-mode: standalone)').matches) {
-        if (installBtn) installBtn.classList.add('hidden');
-      }
-
-      if (installBtn) {
-        installBtn.addEventListener('click', () => {
-          const ua = navigator.userAgent;
-          const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-          const isAndroid = /Android/i.test(ua);
-          const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-
-          if (isIOS && !isStandalone) {
-            alert("To install Garden City SME on your iOS device:\n\n1. Tap the Share icon (at the bottom/top of Safari).\n2. Scroll down and tap 'Add to Home Screen'.");
-            return;
-          }
-
-          if (!deferredPrompt) {
-            if (isAndroid) {
-              alert("Install prompt is not active. The app may already be installed, or you can install it using your browser menu's 'Install app' or 'Add to Home screen' option.");
-            } else {
-              alert("To install, click the install icon in your browser's URL address bar, or use the browser menu and select 'Install' or 'Add to Home screen'.");
-            }
-            return;
-          }
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-              console.log('User accepted the install prompt');
-            } else {
-              console.log('User dismissed the install prompt');
-            }
-            deferredPrompt = null;
-            installBtn.classList.add('hidden');
-          });
-        });
-
-        // Auto-show for iOS Safari if not in standalone display mode
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-        if (isIOS && !isStandalone) {
-          installBtn.classList.remove('hidden');
-        }
-      }
-    })();
 
     // Connection and Sync Progress Indicators
     const statusIndicator = document.createElement('div');
