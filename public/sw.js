@@ -1,4 +1,4 @@
-const CACHE_NAME = 'garden-city-sme-v7';
+const CACHE_NAME = 'garden-city-sme-v8';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -181,7 +181,15 @@ self.addEventListener('fetch', (event) => {
             }
             return response;
           })
-          .catch(() => caches.match(event.request))
+          .catch(() => {
+            return caches.match(event.request).then((res) => {
+              if (res) return res;
+              // Fallback to cached index.html or root shell for any query-string navigation URLs like start_url
+              return caches.match('/index.html').then((fallbackRes) => {
+                return fallbackRes || caches.match('/');
+              });
+            });
+          })
       );
     } else {
       // For static assets, use Cache-First strategy

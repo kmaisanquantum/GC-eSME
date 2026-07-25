@@ -695,6 +695,10 @@
     }
 
     function initGSI() {
+      if (!window.google || !window.google.accounts) {
+        console.warn("Google Sign-In client library not loaded or offline.");
+        return;
+      }
       window.google.accounts.id.initialize({
         client_id: 'your-google-client-id.apps.googleusercontent.com',
         callback: handleGoogleCallback
@@ -707,6 +711,10 @@
 
     async function socialLogin(provider) {
       if (provider === 'google') {
+        if (!window.google || !window.google.accounts) {
+          alert("Google Sign-In is currently unavailable offline or blocked.");
+          return;
+        }
         window.google.accounts.id.prompt();
       } else if (provider === 'facebook') {
         FB.login(function(response) {
@@ -859,7 +867,7 @@
          y += 8;
       });
 
-      doc.save(\"Lending_Readiness_Report_${currentVendor.name.replace(/\s/g, '_')}.pdf\");
+      doc.save('Lending_Readiness_Report_' + currentVendor.name.replace(/\s/g, '_') + '.pdf');
       alert('Report exported successfully!');
     }
 
@@ -903,8 +911,6 @@
           alert('Failed to delete transaction');
         }
       }
-    }
-
     }
 
     async function applyBranding() {
@@ -1322,52 +1328,35 @@
     }
 
 
-    const translations = {"en":{"shop":"Shop","sell":"Sell","wifi":"Wi-Fi","accounts":"Accounts","revenue":"Revenue","expenses":"Expenses","profit":"Estimated Profit","manage_transactions":"Manage Transactions","cart":"Your Shopping Cart","checkout":"Complete Your Order","dashboard":"Vendor Dashboard","products":"Products","orders":"Orders","settings":"Settings","accounting":"Accounting","sign_out":"Sign Out","welcome":"Welcome to Garden City SME","low_stock":"Low Stock Alert"},"tp":{"shop":"Stoa","sell":"Salim","wifi":"Wai-Fai","accounts":"Buk Kibing","revenue":"Mani i kam insait","expenses":"Mani i go ausait","profit":"Seken mani","manage_transactions":"Lukautim mani","cart":"Beg bilong yu","checkout":"Baim olgeta","dashboard":"Dasbot bilong yu","products":"Ol samting","orders":"Ol oda","settings":"Seting","accounting":"Buk Kibing","sign_out":"Givim ap","welcome":"Wanbel long Garden City SME","low_stock":"Sot long ol samting"}};
-    let currentLang = localStorage.getItem('um_lang') || 'en';
 
-    function toggleLanguage() {
-      currentLang = currentLang === 'en' ? 'tp' : 'en';
-      localStorage.setItem('um_lang', currentLang);
-      applyTranslations();
-    }
+    const botForm = document.getElementById('botForm');
+    if (botForm) {
+      botForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('botInput');
+        const text = input.value;
+        if (!text) return;
 
-    function applyTranslations() {
-      const t = translations[currentLang];
-      document.querySelectorAll('[data-t]').forEach(el => {
-        const key = el.getAttribute('data-t');
-        if (t[key]) el.textContent = t[key];
-      });
-      const toggleBtn = document.getElementById('langToggle');
-      if (toggleBtn) toggleBtn.textContent = currentLang === 'en' ? '🇵🇳 Tok Pisin' : '🇬🇧 English';
-    }
-
-    applyTranslations();
-
-    document.getElementById('botForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('botInput');
-      const text = input.value;
-      if (!text) return;
-
-      const chat = document.getElementById('botChat');
-      chat.innerHTML += `<div style="background: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 12px 12px 0 12px; margin-bottom: 8px; margin-left: auto; width: fit-content; max-width: 80%;">${text}</div>`;
-      input.value = '';
-      chat.scrollTop = chat.scrollHeight;
-
-      try {
-        const res = await fetch(`${API_URL}/bot/command`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vendor_id: currentVendor.id, text })
-        });
-        const data = await res.json();
-        chat.innerHTML += `<div style="background: var(--primary); color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">${data.response}</div>`;
+        const chat = document.getElementById('botChat');
+        chat.innerHTML += `<div style="background: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 12px 12px 0 12px; margin-bottom: 8px; margin-left: auto; width: fit-content; max-width: 80%;">${text}</div>`;
+        input.value = '';
         chat.scrollTop = chat.scrollHeight;
-        if (text.toLowerCase().includes('log sale')) updateAccountingUI();
-      } catch (err) {
-        chat.innerHTML += `<div style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">Error communicating with bot.</div>`;
-      }
-    };
+
+        try {
+          const res = await fetch(`${API_URL}/bot/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendor_id: currentVendor.id, text })
+          });
+          const data = await res.json();
+          chat.innerHTML += `<div style="background: var(--primary); color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">${data.response}</div>`;
+          chat.scrollTop = chat.scrollHeight;
+          if (text.toLowerCase().includes('log sale')) updateAccountingUI();
+        } catch (err) {
+          chat.innerHTML += `<div style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 12px 12px 12px 0; margin-bottom: 8px; width: fit-content; max-width: 80%;">Error communicating with bot.</div>`;
+        }
+      };
+    }
 
     init();
   </script>
