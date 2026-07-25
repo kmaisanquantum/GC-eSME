@@ -417,15 +417,21 @@ function initDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER,
         name TEXT,
         email TEXT UNIQUE,
         phone TEXT,
         password TEXT,
         social_provider TEXT,
         social_id TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
       )
     `);
+
+    db.run("ALTER TABLE users ADD COLUMN tenant_id INTEGER", (err) => {
+      // Ignore if already exists
+    });
 
     // Create default admin if not exists with hashed password and env overrides
     let shouldSeedAdmin = true;
@@ -838,15 +844,15 @@ app.post("/api/auth/customer/register", async (req, res) => {
   }
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const sql = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
-    db.run(sql, [name, email, phone, hashedPassword], function(err) {
+    const tenantId = req.tenantId || 1;
+    const sql = "INSERT INTO users (name, email, phone, password, tenant_id) VALUES (?, ?, ?, ?, ?)";
+    db.run(sql, [name, email, phone, hashedPassword, tenantId], function(err) {
       if (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {
           return res.status(400).json({ error: "Email address is already registered" });
         }
         return res.status(500).json({ error: err.message });
       }
-      const tenantId = req.tenantId || 1;
       const token = jwt.sign({ id: this.lastID, role: 'customer', email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' });
       res.json({ id: this.lastID, message: "Customer registered successfully", token });
     });
