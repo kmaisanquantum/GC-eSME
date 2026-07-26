@@ -75,6 +75,7 @@ app.use(helmet({
         "https://cdnjs.cloudflare.com",
         "https://connect.facebook.net"
       ],
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: [
         "'self'",
         "'unsafe-inline'",
