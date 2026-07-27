@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <meta name="theme-color" content="#ca8a04">
+  <meta name="theme-color" content="#15803d">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Garden City SME | Vendor Dashboard</title>
 
@@ -47,8 +47,8 @@
     }
 
     :root {
-      --primary: #ca8a04;
-      --primary-hover: #a16207;
+      --primary: #15803d;
+      --primary-hover: #166534;
       --bg-dark: #0f172a;
       --bg-card: #1e293b;
       --bg-header: #000000;
@@ -90,12 +90,15 @@
       margin-bottom: 2rem;
     }
 
+    .logo-img { height: 40px; width: auto; }
     .logo {
       color: var(--text-accent);
       font-weight: 800;
       font-size: 1.5rem;
       margin-bottom: 2.5rem;
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 10px;
       text-decoration: none;
     }
 
@@ -318,7 +321,7 @@
   </div>
 
   <aside class="sidebar hidden" id="sidebar">
-    <a href="/" class="logo">Unity SME centre</a>
+    <a href="/" class="logo"><img src="/logo.png" class="logo-img" alt="Garden City SME Logo"><span>Unity SME centre</span></a>
     <nav>
       <a onclick="switchTab('overview')" id="nav-overview" class="nav-link active">📊 Overview</a>
       <a onclick="switchTab('accounts')" id="nav-accounts" class="nav-link">📉 Accounts</a>
@@ -349,7 +352,10 @@
 
   <main class="main-content hidden" id="mainContent">
     <div class="header">
-      <h2>Welcome back, <span style="color: var(--text-accent);" id="vendorStoreName">Store Name</span></h2>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="/logo.png" class="logo-img" alt="Garden City SME Logo">
+        <h2>Welcome back, <span style="color: var(--text-accent);" id="vendorStoreName">Store Name</span></h2>
+      </div>
       <a href="#" onclick="logout()" style="color: #ef4444; font-size: 0.8rem; text-decoration: none; font-weight: 600;">Sign Out</a>
       <button class="btn btn-primary" onclick="switchTab('products')">+ Add Product</button>
     </div>
@@ -914,7 +920,12 @@
             document.title = `${b.appName} | Vendor Dashboard`;
             const logoEl = document.getElementById('sidebar') ? document.getElementById('sidebar').querySelector('.logo') : null;
             if (logoEl) {
-              logoEl.textContent = b.appName;
+              const textEl = logoEl.querySelector('span') || logoEl;
+              if (textEl === logoEl) {
+                logoEl.textContent = b.appName;
+              } else {
+                textEl.textContent = b.appName;
+              }
             }
           }
         }

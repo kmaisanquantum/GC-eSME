@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <meta name="theme-color" content="#ca8a04">
+  <meta name="theme-color" content="#15803d">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Garden City SME | Local Shopping Reimagined</title>
@@ -56,8 +56,8 @@
     }
 
     :root {
-      --primary: #ca8a04;
-      --primary-hover: #a16207;
+      --primary: #15803d;
+      --primary-hover: #166534;
       --bg-dark: #111827;
       --bg-card: #1f2937;
       --bg-header: #000000;
@@ -98,6 +98,8 @@
       align-items: center;
       height: 64px;
     }
+
+    .logo-img { height: 40px; width: auto; }
 
     .logo-container {
       display: flex;
@@ -642,6 +644,7 @@
 
   <header class="header">
     <a href="#" class="logo-container" onclick="switchScreen('directory')">
+      <img src="/logo.png" class="logo-img" alt="Garden City SME Logo">
       <h1>Garden City SME</h1>
     </a>
     <div class="header-actions">
