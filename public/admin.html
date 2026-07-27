@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <meta name="theme-color" content="#ca8a04">
+  <meta name="theme-color" content="#15803d">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Portal | Garden City SME</title>
   <style>
@@ -38,7 +38,8 @@
     }
 
     :root {
-      --primary: #ca8a04;
+      --primary: #15803d;
+      --primary-hover: #166534;
       --bg-dark: #111827;
       --bg-card: #1f2937;
       --text-main: #f3f4f6;
@@ -62,6 +63,7 @@
     th { text-align: left; padding: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
     td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
     .hidden { display: none; }
+    .logo-img { height: 40px; width: auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
   </style>
 </head>
@@ -79,7 +81,10 @@
 
   <div id="dashboard" class="dashboard">
     <div class="header">
-      <h1>Garden City SME Admin</h1>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="/logo.png" class="logo-img" alt="Garden City SME Logo">
+        <h1>Garden City SME Admin</h1>
+      </div>
       <button onclick="logout()" style="background: none; border: none; color: #ef4444; cursor: pointer; font-weight: 600;">Logout</button>
     </div>
 

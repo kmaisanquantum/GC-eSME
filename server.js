@@ -155,9 +155,9 @@ app.use('/api', tenantResolver);
 app.get('/api/tenant/branding', (req, res) => {
   const tenantId = req.tenantId || 1;
   const gcDefaultBranding = {
-    primaryColor: '#ca8a04',
-    primaryHover: '#a16207',
-    themeColor: '#ca8a04',
+    primaryColor: '#15803d',
+    primaryHover: '#166534',
+    themeColor: '#15803d',
     appName: 'Garden City SME'
   };
 
@@ -285,9 +285,9 @@ function initDatabase() {
 
     // Seed default tenants with branding info
     const gcBranding = JSON.stringify({
-      primaryColor: '#ca8a04',
-      primaryHover: '#a16207',
-      themeColor: '#ca8a04',
+      primaryColor: '#15803d',
+      primaryHover: '#166534',
+      themeColor: '#15803d',
       appName: 'Garden City SME'
     });
     const unityBranding = JSON.stringify({
@@ -301,6 +301,7 @@ function initDatabase() {
 
     // Idempotent UPDATEs so it doesn't overwrite later edits, only targeting NULL or empty values
     db.run(`UPDATE tenants SET branding_json = ? WHERE id = 1 AND branding_json IS NULL`, [gcBranding]);
+    db.run(`UPDATE tenants SET branding_json = ? WHERE id = 1`, [gcBranding]);
     db.run(`UPDATE tenants SET branding_json = ? WHERE id = 2 AND branding_json IS NULL`, [unityBranding]);
 
     // Vendors table
